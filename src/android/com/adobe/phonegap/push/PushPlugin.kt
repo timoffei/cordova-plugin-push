@@ -280,18 +280,7 @@ class PushPlugin : CordovaPlugin() {
       )
       PushConstants.CLEAR_ALL_NOTIFICATIONS -> executeActionClearAllNotifications(callbackContext)
       PushConstants.SUBSCRIBE -> executeActionSubscribe(data, callbackContext)
-      PushConstants.UNSUBSCRIBE -> {
-        // un-subscribing for a topic
-        cordova.threadPool.execute {
-          try {
-            val topic = data.getString(0)
-            unsubscribeFromTopic(topic, registration_id)
-            callbackContext.success()
-          } catch (e: JSONException) {
-            callbackContext.error(e.message)
-          }
-        }
-      }
+      PushConstants.UNSUBSCRIBE -> executeActionUnsubscribe(data, callbackContext)
       PushConstants.CREATE_CHANNEL -> {
         // un-subscribing for a topic
         cordova.threadPool.execute {
@@ -631,8 +620,17 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
-  private fun executeActionUnsubscribe() {
-
+  private fun executeActionUnsubscribe(data: JSONArray, callbackContext: CallbackContext) {
+    cordova.threadPool.execute {
+      try {
+        Log.v(TAG, "Execute::Unsubscribe")
+        val topic = data.getString(0)
+        unsubscribeFromTopic(topic, registration_id)
+        callbackContext.success()
+      } catch (e: JSONException) {
+        callbackContext.error(e.message)
+      }
+    }
   }
 
   private fun executeActionCreateChannel() {
