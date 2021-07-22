@@ -64,11 +64,11 @@ class BackgroundHandlerActivity : Activity() {
     }
   }
 
-  /**
-   * Takes the pushBundle extras from the intent,
-   * and sends it through to the PushPlugin for processing.
-   */
   private fun processPushBundle() {
+    /*
+     * Takes the pushBundle extras from the intent,
+     * and sends it through to the PushPlugin for processing.
+     */
     intent.extras?.let { extras ->
       var originalExtras = extras.getBundle(PushConstants.PUSH_BUNDLE)
 
@@ -99,12 +99,10 @@ class BackgroundHandlerActivity : Activity() {
     }
   }
 
-  /**
-   * Forces the main activity to re-launch if it's unloaded.
-   *
-   * @param startOnBackground Boolean
-   */
   private fun forceMainActivityReload(startOnBackground: Boolean) {
+    /*
+     * Forces the main activity to re-launch if it's unloaded.
+     */
     val launchIntent = packageManager.getLaunchIntentForPackage(applicationContext.packageName)
 
     intent.extras?.let { extras ->

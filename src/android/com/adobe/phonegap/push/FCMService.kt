@@ -102,9 +102,6 @@ class FCMService : FirebaseMessagingService(), PushConstants {
     }
   }
 
-  /*
-   * Change a values key in the extras bundle
-   */
   private fun replaceKey(
     context: Context,
     oldKey: String,
@@ -112,6 +109,9 @@ class FCMService : FirebaseMessagingService(), PushConstants {
     extras: Bundle,
     newExtras: Bundle
   ) {
+    /*
+     * Change a values key in the extras bundle
+     */
     var value = extras[oldKey]
     if (value != null) {
       if (value is String) {
@@ -127,10 +127,10 @@ class FCMService : FirebaseMessagingService(), PushConstants {
     }
   }
 
-  /*
-   * Normalize localization for key
-   */
   private fun localizeKey(context: Context, key: String, value: String): String {
+    /*
+     * Normalize localization for key
+     */
     return if (key == PushConstants.TITLE || key == PushConstants.MESSAGE || key == PushConstants.SUMMARY_TEXT) {
       try {
         val localeObject = JSONObject(value)
@@ -159,15 +159,15 @@ class FCMService : FirebaseMessagingService(), PushConstants {
     } else value
   }
 
-  /*
-   * Replace alternate keys with our canonical value
-   */
   private fun normalizeKey(
     key: String,
     messageKey: String?,
     titleKey: String?,
     newExtras: Bundle
   ): String {
+    /*
+     * Replace alternate keys with our canonical value
+     */
     var key = key
     return if (key == PushConstants.BODY || key == PushConstants.ALERT || key == PushConstants.MP_MESSAGE || key == PushConstants.GCM_NOTIFICATION_BODY || key == PushConstants.TWILIO_BODY || key == messageKey || key == PushConstants.AWS_PINPOINT_BODY) {
       PushConstants.MESSAGE
@@ -194,15 +194,15 @@ class FCMService : FirebaseMessagingService(), PushConstants {
     }
   }
 
-  /*
-   * Parse bundle into normalized keys.
-   */
   private fun normalizeExtras(
     context: Context,
     extras: Bundle,
     messageKey: String?,
     titleKey: String?
   ): Bundle {
+    /*
+     * Parse bundle into normalized keys.
+     */
     Log.d(LOG_TAG, "normalize extras")
     val it: Iterator<String> = extras.keySet().iterator()
     val newExtras = Bundle()

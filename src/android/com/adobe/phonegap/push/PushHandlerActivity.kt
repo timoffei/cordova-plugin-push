@@ -76,11 +76,11 @@ class PushHandlerActivity : Activity() {
     }
   }
 
-  /**
-   * Takes the pushBundle extras from the intent,
-   * and sends it through to the PushPlugin for processing.
-   */
   private fun processPushBundle(): Boolean {
+    /*
+     * Takes the pushBundle extras from the intent,
+     * and sends it through to the PushPlugin for processing.
+     */
     var hasInline = false
 
     intent.extras?.let { extras ->
@@ -110,10 +110,10 @@ class PushHandlerActivity : Activity() {
     return hasInline
   }
 
-  /**
-   * Forces the main activity to re-launch if it's unloaded.
-   */
   private fun forceMainActivityReload(startOnBackground: Boolean) {
+    /*
+     * Forces the main activity to re-launch if it's unloaded.
+     */
     val launchIntent = packageManager.getLaunchIntentForPackage(applicationContext.packageName)
 
     intent.extras?.let { extras ->
