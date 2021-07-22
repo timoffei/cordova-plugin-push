@@ -283,16 +283,7 @@ class PushPlugin : CordovaPlugin() {
       PushConstants.UNSUBSCRIBE -> executeActionUnsubscribe(data, callbackContext)
       PushConstants.CREATE_CHANNEL -> executeActionCreateChannel(data, callbackContext)
       PushConstants.DELETE_CHANNEL -> executeActionDeleteChannel(data, callbackContext)
-      PushConstants.LIST_CHANNELS -> {
-        // un-subscribing for a topic
-        cordova.threadPool.execute {
-          try {
-            callbackContext.success(listChannels())
-          } catch (e: JSONException) {
-            callbackContext.error(e.message)
-          }
-        }
-      }
+      PushConstants.LIST_CHANNELS -> executeActionListChannels(callbackContext)
       PushConstants.CLEAR_NOTIFICATION -> {
         // clearing a single notification
         cordova.threadPool.execute {
@@ -636,8 +627,15 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
-  private fun executeActionListChannels() {
-
+  private fun executeActionListChannels(callbackContext: CallbackContext) {
+    cordova.threadPool.execute {
+      try {
+        Log.v(TAG, "Execute::ListChannels")
+        callbackContext.success(listChannels())
+      } catch (e: JSONException) {
+        callbackContext.error(e.message)
+      }
+    }
   }
 
   private fun executeActionClearNotification() {
