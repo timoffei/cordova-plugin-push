@@ -1,5 +1,6 @@
 package com.adobe.phonegap.push
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.NotificationManager
 import android.content.Intent
@@ -8,65 +9,69 @@ import android.os.Bundle
 import android.util.Log
 import androidx.core.app.RemoteInput
 
-class PushHandlerActivity : Activity(), PushConstants {
+/**
+ * Push Handler Activity
+ */
+@Suppress("HardCodedStringLiteral")
+@SuppressLint("LongLogTag", "LogConditional")
+class PushHandlerActivity : Activity() {
   companion object {
-    private const val LOG_TAG = "Push_HandlerActivity"
+    private const val TAG: String = "Push_PushHandlerActivity"
   }
 
-  /*
+  /**
    * this activity will be started if the user touches a notification that we own.
    * We send it's data off to the push plugin for processing.
    * If needed, we boot up the main activity to kickstart the application.
+   *
+   * @param savedInstanceState
+   *
    * @see android.app.Activity#onCreate(android.os.Bundle)
    */
   public override fun onCreate(savedInstanceState: Bundle?) {
-    val gcm = FCMService()
-    val intent = intent
-    val notId = intent.extras!!.getInt(PushConstants.NOT_ID, 0)
-    Log.d(LOG_TAG, "not id = $notId")
-
-    gcm.setNotification(notId, "")
-
     super.onCreate(savedInstanceState)
-    Log.v(LOG_TAG, "onCreate")
+    Log.v(TAG, "onCreate")
 
-    val callback = getIntent().extras!!.getString("callback")
-    Log.d(LOG_TAG, "callback = $callback")
+    intent.extras?.let { extras ->
+      val notId = extras.getInt(PushConstants.NOT_ID, 0)
+      val callback = extras.getString(PushConstants.CALLBACK)
+      var foreground = extras.getBoolean(PushConstants.FOREGROUND, true)
+      val startOnBackground = extras.getBoolean(PushConstants.START_IN_BACKGROUND, false)
+      val dismissed = extras.getBoolean(PushConstants.DISMISSED, false)
 
-    var foreground = getIntent().extras!!.getBoolean("foreground", true)
-    val startOnBackground = getIntent().extras!!
-      .getBoolean(PushConstants.START_IN_BACKGROUND, false)
+      FCMService().setNotification(notId, "")
 
-    val dismissed = getIntent().extras!!
-      .getBoolean(PushConstants.DISMISSED, false)
-    Log.d(LOG_TAG, "dismissed = $dismissed")
+      if (!startOnBackground) {
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(FCMService.getAppName(this), notId)
+      }
 
-    if (!startOnBackground) {
-      val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-      notificationManager.cancel(FCMService.getAppName(this), notId)
-    }
+      val inline = processPushBundle()
 
-    val isPushPluginActive = PushPlugin.isActive
-    val inline = processPushBundle(isPushPluginActive, intent)
+      if (inline && Build.VERSION.SDK_INT < Build.VERSION_CODES.N && !startOnBackground) {
+        foreground = true
+      }
 
-    if (inline && Build.VERSION.SDK_INT < Build.VERSION_CODES.N && !startOnBackground) {
-      foreground = true
-    }
+      Log.d(TAG, "Not ID: $notId")
+      Log.d(TAG, "Callback: $callback")
+      Log.d(TAG, "Foreground: $foreground")
+      Log.d(TAG, "Start On Background: $startOnBackground")
+      Log.d(TAG, "Dismissed: $dismissed")
 
-    Log.d(LOG_TAG, "bringToForeground = $foreground")
-    finish()
+      finish()
 
-    if (!dismissed) {
-      Log.d(LOG_TAG, "isPushPluginActive = $isPushPluginActive")
+      if (!dismissed) {
+        Log.d(TAG, "Is Push Plugin Active: ${PushPlugin.isActive}")
 
-      if (!isPushPluginActive && foreground && inline) {
-        Log.d(LOG_TAG, "forceMainActivityReload")
-        forceMainActivityReload(false)
-      } else if (startOnBackground) {
-        Log.d(LOG_TAG, "startOnBackgroundTrue")
-        forceMainActivityReload(true)
-      } else {
-        Log.d(LOG_TAG, "don't want main activity")
+        if (!PushPlugin.isActive && foreground && inline) {
+          Log.d(TAG, "Force Main Activity Reload: Start on Background = False")
+          forceMainActivityReload(false)
+        } else if (startOnBackground) {
+          Log.d(TAG, "Force Main Activity Reload: Start on Background = True")
+          forceMainActivityReload(true)
+        } else {
+          Log.d(TAG, "Don't Want Main Activity")
+        }
       }
     }
   }
@@ -75,62 +80,64 @@ class PushHandlerActivity : Activity(), PushConstants {
    * Takes the pushBundle extras from the intent,
    * and sends it through to the PushPlugin for processing.
    */
-  private fun processPushBundle(isPushPluginActive: Boolean, intent: Intent): Boolean {
-    val extras = getIntent().extras
-    var remoteInput: Bundle? = null
+  private fun processPushBundle(): Boolean {
+    var hasInline = false
 
-    if (extras != null) {
-      val originalExtras = extras.getBundle(PushConstants.PUSH_BUNDLE)
-      originalExtras!!.putBoolean(PushConstants.FOREGROUND, false)
-      originalExtras.putBoolean(PushConstants.COLDSTART, !isPushPluginActive)
-      originalExtras.putBoolean(PushConstants.DISMISSED, extras.getBoolean(PushConstants.DISMISSED))
-      originalExtras.putString(
-        PushConstants.ACTION_CALLBACK,
-        extras.getString(PushConstants.CALLBACK)
-      )
-      originalExtras.remove(PushConstants.NO_CACHE)
+    intent.extras?.let { extras ->
+      extras.getBundle(PushConstants.PUSH_BUNDLE)?.apply {
+        putBoolean(PushConstants.FOREGROUND, false)
+        putBoolean(PushConstants.COLDSTART, !PushPlugin.isActive)
+        putBoolean(PushConstants.DISMISSED, extras.getBoolean(PushConstants.DISMISSED))
+        putString(
+          PushConstants.ACTION_CALLBACK,
+          extras.getString(PushConstants.CALLBACK)
+        )
+        remove(PushConstants.NO_CACHE)
 
-      remoteInput = RemoteInput.getResultsFromIntent(intent)
-      if (remoteInput != null) {
-        val inputString = remoteInput.getCharSequence(PushConstants.INLINE_REPLY).toString()
-        Log.d(LOG_TAG, "response: $inputString")
-        originalExtras.putString(PushConstants.INLINE_REPLY, inputString)
+        RemoteInput.getResultsFromIntent(intent)?.apply {
+          val reply = getCharSequence(PushConstants.INLINE_REPLY).toString()
+          Log.d(TAG, "Inline Reply: $reply")
+
+          putString(PushConstants.INLINE_REPLY, reply)
+
+          hasInline = true
+        }
+
+        PushPlugin.sendExtras(this)
       }
-
-      PushPlugin.sendExtras(originalExtras)
     }
 
-    return remoteInput == null
+    return hasInline
   }
 
   /**
    * Forces the main activity to re-launch if it's unloaded.
    */
   private fun forceMainActivityReload(startOnBackground: Boolean) {
-    val pm = packageManager
-    val launchIntent = pm.getLaunchIntentForPackage(applicationContext.packageName)
-    val extras = intent.extras
+    val launchIntent = packageManager.getLaunchIntentForPackage(applicationContext.packageName)
 
-    if (extras != null) {
-      val originalExtras = extras.getBundle(PushConstants.PUSH_BUNDLE)
+    intent.extras?.let { extras ->
+      launchIntent?.apply {
+        extras.getBundle(PushConstants.PUSH_BUNDLE)?.apply {
+          putExtras(this)
+        }
 
-      if (originalExtras != null) {
-        launchIntent!!.putExtras(originalExtras)
+        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        addFlags(Intent.FLAG_FROM_BACKGROUND)
+        putExtra(PushConstants.START_IN_BACKGROUND, startOnBackground)
       }
-      launchIntent!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-      launchIntent.addFlags(Intent.FLAG_FROM_BACKGROUND)
-      launchIntent.putExtra(PushConstants.START_IN_BACKGROUND, startOnBackground)
     }
 
     startActivity(launchIntent)
   }
 
+  /**
+   * On Resuming of Activity
+   */
   override fun onResume() {
     super.onResume()
 
-    val notificationManager = this.getSystemService(
-      NOTIFICATION_SERVICE
-    ) as NotificationManager
+    val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
     notificationManager.cancelAll()
   }
 }
