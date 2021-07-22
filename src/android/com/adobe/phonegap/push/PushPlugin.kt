@@ -14,7 +14,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
-import androidx.annotation.RequiresApi
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -271,35 +270,9 @@ class PushPlugin : CordovaPlugin() {
     when (action) {
       PushConstants.INITIALIZE -> executeActionInitialize(data, callbackContext)
       PushConstants.UNREGISTER -> executeActionUnregister(data, callbackContext)
+      PushConstants.FINISH -> callbackContext.success()
+      PushConstants.HAS_PERMISSION -> executeActionHasPermission(data, callbackContext)
 
-      PushConstants.FINISH -> {
-        callbackContext.success()
-      }
-      PushConstants.HAS_PERMISSION -> {
-        cordova.threadPool.execute {
-          val jo = JSONObject()
-          try {
-            Log.d(
-              TAG,
-              "has permission: " + NotificationManagerCompat.from(
-                applicationContext
-              )
-                .areNotificationsEnabled()
-            )
-            jo.put(
-              "isEnabled",
-              NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()
-            )
-            val pluginResult = PluginResult(PluginResult.Status.OK, jo)
-            pluginResult.keepCallback = true
-            callbackContext.sendPluginResult(pluginResult)
-          } catch (e: UnknownError) {
-            callbackContext.error(e.message)
-          } catch (e: JSONException) {
-            callbackContext.error(e.message)
-          }
-        }
-      }
       PushConstants.SET_APPLICATION_ICON_BADGE_NUMBER -> {
         cordova.threadPool.execute {
           Log.v(TAG, "setApplicationIconBadgeNumber: data=$data")
@@ -416,10 +389,10 @@ class PushPlugin : CordovaPlugin() {
     callbackContext: CallbackContext
   ) {
     // Better Logging
-    fun formatErrorMessage(msg: String): String = "Execute Initialize: ($msg)"
+    fun formatLogMessage(msg: String): String = "Execute Initialize: ($msg)"
 
     cordova.threadPool.execute(Runnable {
-      Log.v(TAG, formatErrorMessage("Data=$data"))
+      Log.v(TAG, formatLogMessage("Data=$data"))
 
       pushContext = callbackContext
 
@@ -438,20 +411,20 @@ class PushPlugin : CordovaPlugin() {
         // If no NotificationChannels exist create the default one
         createDefaultNotificationChannelIfNeeded(jo)
 
-        Log.v(TAG, formatErrorMessage("JSONObject=$jo"))
-        Log.v(TAG, formatErrorMessage("senderID=$senderID"))
+        Log.v(TAG, formatLogMessage("JSONObject=$jo"))
+        Log.v(TAG, formatLogMessage("senderID=$senderID"))
 
         try {
           token = FirebaseInstanceId.getInstance().token
         } catch (e: IllegalStateException) {
-          Log.e(TAG, formatErrorMessage("Firebase Token Exception ${e.message}"))
+          Log.e(TAG, formatLogMessage("Firebase Token Exception ${e.message}"))
         }
 
         if (token == null) {
           try {
             token = FirebaseInstanceId.getInstance().getToken(senderID, PushConstants.FCM)
           } catch (e: IllegalStateException) {
-            Log.e(TAG, formatErrorMessage("Firebase Token Exception ${e.message}"))
+            Log.e(TAG, formatLogMessage("Firebase Token Exception ${e.message}"))
           }
         }
 
@@ -460,7 +433,7 @@ class PushPlugin : CordovaPlugin() {
             put(PushConstants.REGISTRATION_TYPE, PushConstants.FCM)
           }
 
-          Log.v(TAG, formatErrorMessage("onRegistered=$registration"))
+          Log.v(TAG, formatLogMessage("onRegistered=$registration"))
 
           val topics = jo.optJSONArray(PushConstants.TOPICS)
           subscribeToTopics(topics, registration_id)
@@ -471,13 +444,13 @@ class PushPlugin : CordovaPlugin() {
           return@Runnable
         }
       } catch (e: JSONException) {
-        Log.e(TAG, formatErrorMessage("JSON Exception ${e.message}"))
+        Log.e(TAG, formatLogMessage("JSON Exception ${e.message}"))
         callbackContext.error(e.message)
       } catch (e: IOException) {
-        Log.e(TAG, formatErrorMessage("IO Exception ${e.message}"))
+        Log.e(TAG, formatLogMessage("IO Exception ${e.message}"))
         callbackContext.error(e.message)
       } catch (e: NotFoundException) {
-        Log.e(TAG, formatErrorMessage("Resources NotFoundException Exception ${e.message}"))
+        Log.e(TAG, formatLogMessage("Resources NotFoundException Exception ${e.message}"))
         callbackContext.error(e.message)
       }
 
@@ -494,7 +467,7 @@ class PushPlugin : CordovaPlugin() {
           try {
             putString(PushConstants.ICON, it.getString(PushConstants.ICON))
           } catch (e: JSONException) {
-            Log.d(TAG, formatErrorMessage("No Icon Options"))
+            Log.d(TAG, formatLogMessage("No Icon Options"))
           }
 
           /**
@@ -503,7 +476,7 @@ class PushPlugin : CordovaPlugin() {
           try {
             putString(PushConstants.ICON_COLOR, it.getString(PushConstants.ICON_COLOR))
           } catch (e: JSONException) {
-            Log.d(TAG, formatErrorMessage("No Icon Color Options"))
+            Log.d(TAG, formatLogMessage("No Icon Color Options"))
           }
 
           /**
@@ -562,7 +535,7 @@ class PushPlugin : CordovaPlugin() {
       }
 
       if (gCachedExtras.isNotEmpty()) {
-        Log.v(TAG, formatErrorMessage("Sending Cached Extras"))
+        Log.v(TAG, formatLogMessage("Sending Cached Extras"))
 
         synchronized(gCachedExtras) {
           val gCachedExtrasIterator: Iterator<Bundle> = gCachedExtras.iterator()
@@ -582,7 +555,7 @@ class PushPlugin : CordovaPlugin() {
     callbackContext: CallbackContext
   ) {
     // Better Logging
-    fun formatErrorMessage(msg: String): String = "Execute Unregister: ($msg)"
+    fun formatLogMessage(msg: String): String = "Execute Unregister: ($msg)"
 
     cordova.threadPool.execute {
       try {
@@ -596,7 +569,7 @@ class PushPlugin : CordovaPlugin() {
           unsubscribeFromTopics(topics, registration_id)
         } else {
           FirebaseInstanceId.getInstance().deleteInstanceId()
-          Log.v(TAG, formatErrorMessage("UNREGISTER"))
+          Log.v(TAG, formatLogMessage("UNREGISTER"))
 
           /**
            * Remove Shared Preferences
@@ -621,18 +594,41 @@ class PushPlugin : CordovaPlugin() {
 
         callbackContext.success()
       } catch (e: IOException) {
-        Log.e(TAG, formatErrorMessage("IO Exception ${e.message}"))
+        Log.e(TAG, formatLogMessage("IO Exception ${e.message}"))
         callbackContext.error(e.message)
       }
     }
   }
 
-  private fun executeActionFinish() {
+  private fun executeActionHasPermission(
+    data: JSONArray,
+    callbackContext: CallbackContext
+  ) {
+    // Better Logging
+    fun formatLogMessage(msg: String): String = "Execute Unregister: ($msg)"
 
-  }
+    cordova.threadPool.execute {
+      try {
+        val isNotificationEnabled = NotificationManagerCompat.from(applicationContext)
+          .areNotificationsEnabled()
 
-  private fun executeActionHasPermission() {
+        Log.d(TAG, formatLogMessage("Has Notification Permission: $isNotificationEnabled"))
 
+        val jo = JSONObject().apply {
+          put(PushConstants.IS_ENABLED, isNotificationEnabled)
+        }
+
+        val pluginResult = PluginResult(PluginResult.Status.OK, jo).apply {
+          keepCallback = true
+        }
+
+        callbackContext.sendPluginResult(pluginResult)
+      } catch (e: UnknownError) {
+        callbackContext.error(e.message)
+      } catch (e: JSONException) {
+        callbackContext.error(e.message)
+      }
+    }
   }
 
   private fun executeActionSetApplicationIconBadgeNumber() {
