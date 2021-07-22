@@ -271,7 +271,7 @@ class PushPlugin : CordovaPlugin() {
       PushConstants.INITIALIZE -> executeActionInitialize(data, callbackContext)
       PushConstants.UNREGISTER -> executeActionUnregister(data, callbackContext)
       PushConstants.FINISH -> callbackContext.success()
-      PushConstants.HAS_PERMISSION -> executeActionHasPermission(data, callbackContext)
+      PushConstants.HAS_PERMISSION -> executeActionHasPermission(callbackContext)
       PushConstants.SET_APPLICATION_ICON_BADGE_NUMBER -> executeActionSetIconBadgeNumber(
         data, callbackContext
       )
@@ -583,9 +583,9 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
-  private fun executeActionHasPermission(data: JSONArray, callbackContext: CallbackContext) {
+  private fun executeActionHasPermission(callbackContext: CallbackContext) {
     // Better Logging
-    fun formatLogMessage(msg: String): String = "Execute Unregister: ($msg)"
+    fun formatLogMessage(msg: String): String = "Execute Has Permission: ($msg)"
 
     cordova.threadPool.execute {
       try {
