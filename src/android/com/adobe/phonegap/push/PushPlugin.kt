@@ -268,256 +268,386 @@ class PushPlugin : CordovaPlugin() {
 
     gWebView = webView
 
-    if (PushConstants.INITIALIZE == action) {
-      cordova.threadPool.execute(Runnable {
-        pushContext = callbackContext
-        var jo: JSONObject? = null
-        Log.v(TAG, "execute: data=$data")
-        val sharedPref = applicationContext.getSharedPreferences(
-          PushConstants.COM_ADOBE_PHONEGAP_PUSH,
-          Context.MODE_PRIVATE
-        )
-        var token: String? = null
-        var senderID: String? = null
-        try {
-          jo = data.getJSONObject(0).getJSONObject(PushConstants.ANDROID)
+    when (action) {
+      PushConstants.INITIALIZE -> executeActionInitialize(data, callbackContext)
 
-          // If no NotificationChannels exist create the default one
-          createDefaultNotificationChannelIfNeeded(jo)
-          Log.v(TAG, "execute: jo=$jo")
-          senderID = getStringResourceByName(PushConstants.GCM_DEFAULT_SENDER_ID)
-          Log.v(TAG, "execute: senderID=$senderID")
+      PushConstants.UNREGISTER -> {
+        cordova.threadPool.execute {
           try {
-            token = FirebaseInstanceId.getInstance().token
-          } catch (e: IllegalStateException) {
-            Log.e(TAG, "Exception raised while getting Firebase token " + e.message)
-          }
-          if (token == null) {
-            try {
-              token = FirebaseInstanceId.getInstance().getToken(senderID, PushConstants.FCM)
-            } catch (e: IllegalStateException) {
-              Log.e(TAG, "Exception raised while getting Firebase token " + e.message)
+            val sharedPref = applicationContext.getSharedPreferences(
+              PushConstants.COM_ADOBE_PHONEGAP_PUSH,
+              Context.MODE_PRIVATE
+            )
+            val topics = data.optJSONArray(0)
+            if (topics != null && "" != registration_id) {
+              unsubscribeFromTopics(topics, registration_id)
+            } else {
+              FirebaseInstanceId.getInstance().deleteInstanceId()
+              Log.v(TAG, "UNREGISTER")
+
+              // Remove shared prefs
+              val editor = sharedPref.edit()
+              editor.remove(PushConstants.SOUND)
+              editor.remove(PushConstants.VIBRATE)
+              editor.remove(PushConstants.CLEAR_BADGE)
+              editor.remove(PushConstants.CLEAR_NOTIFICATIONS)
+              editor.remove(PushConstants.FORCE_SHOW)
+              editor.remove(PushConstants.SENDER_ID)
+              editor.commit()
             }
+            callbackContext.success()
+          } catch (e: IOException) {
+            Log.e(TAG, "execute: Got JSON Exception " + e.message)
+            callbackContext.error(e.message)
           }
-          if ("" != token) {
-            val json = JSONObject().put(PushConstants.REGISTRATION_ID, token)
-            json.put(PushConstants.REGISTRATION_TYPE, PushConstants.FCM)
-            Log.v(TAG, "onRegistered: $json")
-            val topics = jo.optJSONArray(PushConstants.TOPICS)
-            subscribeToTopics(topics, registration_id)
-            sendEvent(json)
-          } else {
-            callbackContext.error("Empty registration ID received from FCM")
-            return@Runnable
-          }
-        } catch (e: JSONException) {
-          Log.e(TAG, "execute: Got JSON Exception " + e.message)
-          callbackContext.error(e.message)
-        } catch (e: IOException) {
-          Log.e(TAG, "execute: Got IO Exception " + e.message)
-          callbackContext.error(e.message)
-        } catch (e: NotFoundException) {
-          Log.e(TAG, "execute: Got Resources NotFoundException " + e.message)
-          callbackContext.error(e.message)
         }
-        if (jo != null) {
-          val editor = sharedPref.edit()
+      }
+      PushConstants.FINISH -> {
+        callbackContext.success()
+      }
+      PushConstants.HAS_PERMISSION -> {
+        cordova.threadPool.execute {
+          val jo = JSONObject()
           try {
-            editor.putString(PushConstants.ICON, jo.getString(PushConstants.ICON))
+            Log.d(
+              TAG,
+              "has permission: " + NotificationManagerCompat.from(
+                applicationContext
+              )
+                .areNotificationsEnabled()
+            )
+            jo.put(
+              "isEnabled",
+              NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()
+            )
+            val pluginResult = PluginResult(PluginResult.Status.OK, jo)
+            pluginResult.keepCallback = true
+            callbackContext.sendPluginResult(pluginResult)
+          } catch (e: UnknownError) {
+            callbackContext.error(e.message)
           } catch (e: JSONException) {
-            Log.d(TAG, "no icon option")
+            callbackContext.error(e.message)
           }
+        }
+      }
+      PushConstants.SET_APPLICATION_ICON_BADGE_NUMBER -> {
+        cordova.threadPool.execute {
+          Log.v(TAG, "setApplicationIconBadgeNumber: data=$data")
           try {
-            editor.putString(PushConstants.ICON_COLOR, jo.getString(PushConstants.ICON_COLOR))
+            setApplicationIconBadgeNumber(
+              applicationContext,
+              data.getJSONObject(0).getInt(PushConstants.BADGE)
+            )
           } catch (e: JSONException) {
-            Log.d(TAG, "no iconColor option")
+            callbackContext.error(e.message)
           }
-          val clearBadge = jo.optBoolean(PushConstants.CLEAR_BADGE, false)
+          callbackContext.success()
+        }
+      }
+      PushConstants.GET_APPLICATION_ICON_BADGE_NUMBER -> {
+        cordova.threadPool.execute {
+          Log.v(TAG, "getApplicationIconBadgeNumber")
+          callbackContext.success(
+            getApplicationIconBadgeNumber(
+              applicationContext
+            )
+          )
+        }
+      }
+      PushConstants.CLEAR_ALL_NOTIFICATIONS -> {
+        cordova.threadPool.execute {
+          Log.v(TAG, "clearAllNotifications")
+          clearAllNotifications()
+          callbackContext.success()
+        }
+      }
+      PushConstants.SUBSCRIBE -> {
+        // Subscribing for a topic
+        cordova.threadPool.execute {
+          try {
+            val topic = data.getString(0)
+            subscribeToTopic(topic, registration_id)
+            callbackContext.success()
+          } catch (e: JSONException) {
+            callbackContext.error(e.message)
+          }
+        }
+      }
+      PushConstants.UNSUBSCRIBE -> {
+        // un-subscribing for a topic
+        cordova.threadPool.execute {
+          try {
+            val topic = data.getString(0)
+            unsubscribeFromTopic(topic, registration_id)
+            callbackContext.success()
+          } catch (e: JSONException) {
+            callbackContext.error(e.message)
+          }
+        }
+      }
+      PushConstants.CREATE_CHANNEL -> {
+        // un-subscribing for a topic
+        cordova.threadPool.execute {
+          try {
+            // call create channel
+            createChannel(data.getJSONObject(0))
+            callbackContext.success()
+          } catch (e: JSONException) {
+            callbackContext.error(e.message)
+          }
+        }
+      }
+      PushConstants.DELETE_CHANNEL -> {
+        // un-subscribing for a topic
+        cordova.threadPool.execute {
+          try {
+            val channelId = data.getString(0)
+            deleteChannel(channelId)
+            callbackContext.success()
+          } catch (e: JSONException) {
+            callbackContext.error(e.message)
+          }
+        }
+      }
+      PushConstants.LIST_CHANNELS -> {
+        // un-subscribing for a topic
+        cordova.threadPool.execute {
+          try {
+            callbackContext.success(listChannels())
+          } catch (e: JSONException) {
+            callbackContext.error(e.message)
+          }
+        }
+      }
+      PushConstants.CLEAR_NOTIFICATION -> {
+        // clearing a single notification
+        cordova.threadPool.execute {
+          try {
+            Log.v(TAG, "clearNotification")
+            val id = data.getInt(0)
+            clearNotification(id)
+            callbackContext.success()
+          } catch (e: JSONException) {
+            callbackContext.error(e.message)
+          }
+        }
+      }
+      else -> {
+        Log.e(TAG, "Invalid action : $action")
+        callbackContext.sendPluginResult(PluginResult(PluginResult.Status.INVALID_ACTION))
+        return false
+      }
+    }
+    return true
+  }
+
+  private fun executeActionInitialize(
+    data: JSONArray,
+    callbackContext: CallbackContext
+  ) {
+    // Better Logging
+    fun formatErrorMessage(msg: String): String = "Execute Initialize: ($msg)"
+
+    cordova.threadPool.execute(Runnable {
+      Log.v(TAG, formatErrorMessage("Data=$data"))
+
+      pushContext = callbackContext
+
+      val sharedPref = applicationContext.getSharedPreferences(
+        PushConstants.COM_ADOBE_PHONEGAP_PUSH,
+        Context.MODE_PRIVATE
+      )
+      var jo: JSONObject? = null
+      var token: String? = null
+      var senderID: String? = null
+
+      try {
+        jo = data.getJSONObject(0).getJSONObject(PushConstants.ANDROID)
+        senderID = getStringResourceByName(PushConstants.GCM_DEFAULT_SENDER_ID)
+
+        // If no NotificationChannels exist create the default one
+        createDefaultNotificationChannelIfNeeded(jo)
+
+        Log.v(TAG, formatErrorMessage("JSONObject=$jo"))
+        Log.v(TAG, formatErrorMessage("senderID=$senderID"))
+
+        try {
+          token = FirebaseInstanceId.getInstance().token
+        } catch (e: IllegalStateException) {
+          Log.e(TAG, formatErrorMessage("Firebase Token Exception ${e.message}"))
+        }
+
+        if (token == null) {
+          try {
+            token = FirebaseInstanceId.getInstance().getToken(senderID, PushConstants.FCM)
+          } catch (e: IllegalStateException) {
+            Log.e(TAG, formatErrorMessage("Firebase Token Exception ${e.message}"))
+          }
+        }
+
+        if (token != "") {
+          val registration = JSONObject().put(PushConstants.REGISTRATION_ID, token).apply {
+            put(PushConstants.REGISTRATION_TYPE, PushConstants.FCM)
+          }
+
+          Log.v(TAG, formatErrorMessage("onRegistered=$registration"))
+
+          val topics = jo.optJSONArray(PushConstants.TOPICS)
+          subscribeToTopics(topics, registration_id)
+
+          sendEvent(registration)
+        } else {
+          callbackContext.error("Empty registration ID received from FCM")
+          return@Runnable
+        }
+      } catch (e: JSONException) {
+        Log.e(TAG, formatErrorMessage("JSON Exception ${e.message}"))
+        callbackContext.error(e.message)
+      } catch (e: IOException) {
+        Log.e(TAG, formatErrorMessage("IO Exception ${e.message}"))
+        callbackContext.error(e.message)
+      } catch (e: NotFoundException) {
+        Log.e(TAG, formatErrorMessage("Resources NotFoundException Exception ${e.message}"))
+        callbackContext.error(e.message)
+      }
+
+      jo?.let {
+        sharedPref.edit()?.apply {
+          /**
+           * Set Icon
+           */
+          try {
+            putString(PushConstants.ICON, it.getString(PushConstants.ICON))
+          } catch (e: JSONException) {
+            Log.d(TAG, formatErrorMessage("No Icon Options"))
+          }
+
+          /**
+           * Set Icon Color
+           */
+          try {
+            putString(PushConstants.ICON_COLOR, it.getString(PushConstants.ICON_COLOR))
+          } catch (e: JSONException) {
+            Log.d(TAG, formatErrorMessage("No Icon Color Options"))
+          }
+
+          /**
+           * Clear badge count when true
+           */
+          val clearBadge = it.optBoolean(PushConstants.CLEAR_BADGE, false)
+          putBoolean(PushConstants.CLEAR_BADGE, clearBadge)
+
           if (clearBadge) {
             setApplicationIconBadgeNumber(applicationContext, 0)
           }
-          editor.putBoolean(PushConstants.SOUND, jo.optBoolean(PushConstants.SOUND, true))
-          editor.putBoolean(PushConstants.VIBRATE, jo.optBoolean(PushConstants.VIBRATE, true))
-          editor.putBoolean(PushConstants.CLEAR_BADGE, clearBadge)
-          editor.putBoolean(
-            PushConstants.CLEAR_NOTIFICATIONS,
-            jo.optBoolean(PushConstants.CLEAR_NOTIFICATIONS, true)
-          )
-          editor.putBoolean(
-            PushConstants.FORCE_SHOW,
-            jo.optBoolean(PushConstants.FORCE_SHOW, false)
-          )
-          editor.putString(PushConstants.SENDER_ID, senderID)
-          editor.putString(PushConstants.MESSAGE_KEY, jo.optString(PushConstants.MESSAGE_KEY))
-          editor.putString(PushConstants.TITLE_KEY, jo.optString(PushConstants.TITLE_KEY))
-          editor.commit()
-        }
-        if (!gCachedExtras.isEmpty()) {
-          Log.v(TAG, "sending cached extras")
-          synchronized(gCachedExtras) {
-            val gCachedExtrasIterator: Iterator<Bundle> = gCachedExtras.iterator()
-            while (gCachedExtrasIterator.hasNext()) {
-              sendExtras(gCachedExtrasIterator.next())
-            }
-          }
-          gCachedExtras.clear()
-        }
-      })
-    } else if (PushConstants.UNREGISTER == action) {
-      cordova.threadPool.execute {
-        try {
-          val sharedPref = applicationContext.getSharedPreferences(
-            PushConstants.COM_ADOBE_PHONEGAP_PUSH,
-            Context.MODE_PRIVATE
-          )
-          val topics = data.optJSONArray(0)
-          if (topics != null && "" != registration_id) {
-            unsubscribeFromTopics(topics, registration_id)
-          } else {
-            FirebaseInstanceId.getInstance().deleteInstanceId()
-            Log.v(TAG, "UNREGISTER")
 
-            // Remove shared prefs
-            val editor = sharedPref.edit()
-            editor.remove(PushConstants.SOUND)
-            editor.remove(PushConstants.VIBRATE)
-            editor.remove(PushConstants.CLEAR_BADGE)
-            editor.remove(PushConstants.CLEAR_NOTIFICATIONS)
-            editor.remove(PushConstants.FORCE_SHOW)
-            editor.remove(PushConstants.SENDER_ID)
-            editor.commit()
+          /**
+           * Set Sound
+           */
+          putBoolean(PushConstants.SOUND, it.optBoolean(PushConstants.SOUND, true))
+
+          /**
+           * Set Vibrate
+           */
+          putBoolean(PushConstants.VIBRATE, it.optBoolean(PushConstants.VIBRATE, true))
+
+          /**
+           * Set Clear Notifications
+           */
+          putBoolean(
+            PushConstants.CLEAR_NOTIFICATIONS,
+            it.optBoolean(PushConstants.CLEAR_NOTIFICATIONS, true)
+          )
+
+          /**
+           * Set Force Show
+           */
+          putBoolean(
+            PushConstants.FORCE_SHOW,
+            it.optBoolean(PushConstants.FORCE_SHOW, false)
+          )
+
+          /**
+           * Set SenderID
+           */
+          putString(PushConstants.SENDER_ID, senderID)
+
+          /**
+           * Set Message Key
+           */
+          putString(PushConstants.MESSAGE_KEY, it.optString(PushConstants.MESSAGE_KEY))
+
+          /**
+           * Set Title Key
+           */
+          putString(PushConstants.TITLE_KEY, it.optString(PushConstants.TITLE_KEY))
+
+          commit()
+        }
+      }
+
+      if (gCachedExtras.isNotEmpty()) {
+        Log.v(TAG, formatErrorMessage("Sending Cached Extras"))
+
+        synchronized(gCachedExtras) {
+          val gCachedExtrasIterator: Iterator<Bundle> = gCachedExtras.iterator()
+
+          while (gCachedExtrasIterator.hasNext()) {
+            sendExtras(gCachedExtrasIterator.next())
           }
-          callbackContext.success()
-        } catch (e: IOException) {
-          Log.e(TAG, "execute: Got JSON Exception " + e.message)
-          callbackContext.error(e.message)
         }
+
+        gCachedExtras.clear()
       }
-    } else if (PushConstants.FINISH == action) {
-      callbackContext.success()
-    } else if (PushConstants.HAS_PERMISSION == action) {
-      cordova.threadPool.execute {
-        val jo = JSONObject()
-        try {
-          Log.d(
-            TAG,
-            "has permission: " + NotificationManagerCompat.from(
-              applicationContext
-            )
-              .areNotificationsEnabled()
-          )
-          jo.put(
-            "isEnabled",
-            NotificationManagerCompat.from(applicationContext).areNotificationsEnabled()
-          )
-          val pluginResult = PluginResult(PluginResult.Status.OK, jo)
-          pluginResult.keepCallback = true
-          callbackContext.sendPluginResult(pluginResult)
-        } catch (e: UnknownError) {
-          callbackContext.error(e.message)
-        } catch (e: JSONException) {
-          callbackContext.error(e.message)
-        }
-      }
-    } else if (PushConstants.SET_APPLICATION_ICON_BADGE_NUMBER == action) {
-      cordova.threadPool.execute {
-        Log.v(TAG, "setApplicationIconBadgeNumber: data=$data")
-        try {
-          setApplicationIconBadgeNumber(
-            applicationContext,
-            data.getJSONObject(0).getInt(PushConstants.BADGE)
-          )
-        } catch (e: JSONException) {
-          callbackContext.error(e.message)
-        }
-        callbackContext.success()
-      }
-    } else if (PushConstants.GET_APPLICATION_ICON_BADGE_NUMBER == action) {
-      cordova.threadPool.execute {
-        Log.v(TAG, "getApplicationIconBadgeNumber")
-        callbackContext.success(
-          getApplicationIconBadgeNumber(
-            applicationContext
-          )
-        )
-      }
-    } else if (PushConstants.CLEAR_ALL_NOTIFICATIONS == action) {
-      cordova.threadPool.execute {
-        Log.v(TAG, "clearAllNotifications")
-        clearAllNotifications()
-        callbackContext.success()
-      }
-    } else if (PushConstants.SUBSCRIBE == action) {
-      // Subscribing for a topic
-      cordova.threadPool.execute {
-        try {
-          val topic = data.getString(0)
-          subscribeToTopic(topic, registration_id)
-          callbackContext.success()
-        } catch (e: JSONException) {
-          callbackContext.error(e.message)
-        }
-      }
-    } else if (PushConstants.UNSUBSCRIBE == action) {
-      // un-subscribing for a topic
-      cordova.threadPool.execute {
-        try {
-          val topic = data.getString(0)
-          unsubscribeFromTopic(topic, registration_id)
-          callbackContext.success()
-        } catch (e: JSONException) {
-          callbackContext.error(e.message)
-        }
-      }
-    } else if (PushConstants.CREATE_CHANNEL == action) {
-      // un-subscribing for a topic
-      cordova.threadPool.execute {
-        try {
-          // call create channel
-          createChannel(data.getJSONObject(0))
-          callbackContext.success()
-        } catch (e: JSONException) {
-          callbackContext.error(e.message)
-        }
-      }
-    } else if (PushConstants.DELETE_CHANNEL == action) {
-      // un-subscribing for a topic
-      cordova.threadPool.execute {
-        try {
-          val channelId = data.getString(0)
-          deleteChannel(channelId)
-          callbackContext.success()
-        } catch (e: JSONException) {
-          callbackContext.error(e.message)
-        }
-      }
-    } else if (PushConstants.LIST_CHANNELS == action) {
-      // un-subscribing for a topic
-      cordova.threadPool.execute {
-        try {
-          callbackContext.success(listChannels())
-        } catch (e: JSONException) {
-          callbackContext.error(e.message)
-        }
-      }
-    } else if (PushConstants.CLEAR_NOTIFICATION == action) {
-      // clearing a single notification
-      cordova.threadPool.execute {
-        try {
-          Log.v(TAG, "clearNotification")
-          val id = data.getInt(0)
-          clearNotification(id)
-          callbackContext.success()
-        } catch (e: JSONException) {
-          callbackContext.error(e.message)
-        }
-      }
-    } else {
-      Log.e(TAG, "Invalid action : $action")
-      callbackContext.sendPluginResult(PluginResult(PluginResult.Status.INVALID_ACTION))
-      return false
-    }
-    return true
+    })
+  }
+
+  private fun executeActionUnregister() {
+
+  }
+
+  private fun executeActionFinish() {
+
+  }
+
+  private fun executeActionHasPermission() {
+
+  }
+
+  private fun executeActionSetApplicationIconBadgeNumber() {
+
+  }
+
+  private fun executeActionGetApplicationIconBadgeNumber() {
+
+  }
+
+  private fun executeActionClearAllNotifications() {
+
+  }
+
+  private fun executeActionSubscribe() {
+
+  }
+
+  private fun executeActionUnsubscribe() {
+
+  }
+
+  private fun executeActionCreateChannel() {
+
+  }
+
+  private fun executeActionDeleteChannel() {
+
+  }
+
+  private fun executeActionListChannels() {
+
+  }
+
+  private fun executeActionClearNotification() {
+
   }
 
   /**
