@@ -286,7 +286,7 @@ class PushPlugin : CordovaPlugin() {
       PushConstants.LIST_CHANNELS -> executeActionListChannels(callbackContext)
       PushConstants.CLEAR_NOTIFICATION -> executeActionClearNotification(data, callbackContext)
       else -> {
-        Log.e(TAG, "Invalid action : $action")
+        Log.e(TAG, "Execute: Invalid Action $action")
         callbackContext.sendPluginResult(PluginResult(PluginResult.Status.INVALID_ACTION))
         return false
       }
