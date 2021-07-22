@@ -1,5 +1,6 @@
 package com.adobe.phonegap.push
 
+import android.annotation.SuppressLint
 import android.annotation.TargetApi
 import android.app.Activity
 import android.app.NotificationChannel
@@ -13,6 +14,8 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
+import androidx.annotation.RequiresApi
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.iid.FirebaseInstanceId
@@ -25,121 +28,220 @@ import org.json.JSONObject
 import java.io.IOException
 import java.util.*
 
-class PushPlugin : CordovaPlugin(), PushConstants {
+@Suppress("HardCodedStringLiteral")
+@SuppressLint("LogConditional")
+class PushPlugin : CordovaPlugin() {
+
+  /**
+   * Gets Cordova's AppCompatActivity
+   *
+   * @return AppCompatActivity
+   */
+  private val activity: AppCompatActivity
+    get() = cordova.activity
 
   /**
    * Gets the application context from cordova's main activity.
    *
-   * @return the application context
+   * @return Context of the application
    */
   private val applicationContext: Context
-    private get() = cordova.activity.applicationContext
-  private val appName: String
-    private get() = cordova.activity
-      .packageManager
-      .getApplicationLabel(
-        cordova.activity.applicationInfo
-      ) as String
+    get() = activity.applicationContext
 
+  /**
+   * Get the NotificationManager of the activity.
+   *
+   * @return NotificationManager
+   */
+  private val notificationManager: NotificationManager
+    get() = (activity.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
+
+  /**
+   * Return the application name
+   *
+   * @return String
+   */
+  private val appName: String
+    get() = activity.packageManager.getApplicationLabel(activity.applicationInfo) as String
+
+  /**
+   * Return List of Channels
+   *
+   * @return JSONArray If the target API is below 26 (O), it will return an empty JSONArray
+   */
   @TargetApi(26)
   @Throws(JSONException::class)
   private fun listChannels(): JSONArray {
     val channels = JSONArray()
-    // only call on Android O and above
+
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      val notificationManager = cordova.activity
-        .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       val notificationChannels = notificationManager.notificationChannels
+
       for (notificationChannel in notificationChannels) {
-        val channel = JSONObject()
-        channel.put(PushConstants.CHANNEL_ID, notificationChannel.id)
-        channel.put(PushConstants.CHANNEL_DESCRIPTION, notificationChannel.description)
+        val channel = JSONObject().apply {
+          put(PushConstants.CHANNEL_ID, notificationChannel.id)
+          put(PushConstants.CHANNEL_DESCRIPTION, notificationChannel.description)
+        }
+
         channels.put(channel)
       }
     }
+
     return channels
   }
 
+  /**
+   * Deletes Notification Channel by Channel ID
+   * Only called for API 26 or higher
+   *
+   * @param channelId
+   */
   @TargetApi(26)
   private fun deleteChannel(channelId: String) {
-    // only call on Android O and above
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      val notificationManager = cordova.activity
-        .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
       notificationManager.deleteNotificationChannel(channelId)
     }
   }
 
+  /**
+   * Creates Channel
+   * Only called for API 26 or higher
+   *
+   * @param channel
+   */
   @TargetApi(26)
   @Throws(JSONException::class)
   private fun createChannel(channel: JSONObject?) {
-    // only call on Android O and above
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      val notificationManager = cordova.activity
-        .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-      val packageName = applicationContext.packageName
-      val appName = appName
-      val mChannel = NotificationChannel(
-        channel!!.getString(PushConstants.CHANNEL_ID),
-        channel.optString(PushConstants.CHANNEL_DESCRIPTION, appName),
-        channel.optInt(PushConstants.CHANNEL_IMPORTANCE, NotificationManager.IMPORTANCE_DEFAULT)
-      )
-      val lightColor = channel.optInt(PushConstants.CHANNEL_LIGHT_COLOR, -1)
-      if (lightColor != -1) {
-        mChannel.enableLights(true)
-        mChannel.lightColor = lightColor
+      channel?.let {
+        NotificationChannel(
+          it.getString(PushConstants.CHANNEL_ID),
+          it.optString(PushConstants.CHANNEL_DESCRIPTION, appName),
+          it.optInt(PushConstants.CHANNEL_IMPORTANCE, NotificationManager.IMPORTANCE_DEFAULT)
+        ).apply {
+          /**
+           * Enable Lights when Light Color is set.
+           */
+          val mLightColor = it.optInt(PushConstants.CHANNEL_LIGHT_COLOR, -1)
+          if (mLightColor != -1) {
+            enableLights(true)
+            lightColor = mLightColor
+          }
+
+          /**
+           * Set Lock Screen Visibility.
+           */
+          lockscreenVisibility = channel.optInt(
+            PushConstants.VISIBILITY,
+            NotificationCompat.VISIBILITY_PUBLIC
+          )
+
+          /**
+           * Set if badge should be shown
+           */
+          setShowBadge(it.optBoolean(PushConstants.BADGE, true))
+
+          /**
+           * Sound Settings
+           */
+          val (soundUri, audioAttributes) = getNotificationChannelSound(it)
+          setSound(soundUri, audioAttributes)
+
+          /**
+           * Set vibration settings.
+           * Data can be either JSONArray or Boolean value.
+           */
+          val (hasVibration, vibrationPatternArray) = getNotificationChannelVibration(it)
+          if (vibrationPatternArray != null) {
+            vibrationPattern = vibrationPatternArray
+          } else {
+            enableVibration(hasVibration)
+          }
+
+          notificationManager.createNotificationChannel(this)
+        }
       }
-      val visibility =
-        channel.optInt(PushConstants.VISIBILITY, NotificationCompat.VISIBILITY_PUBLIC)
-      mChannel.lockscreenVisibility = visibility
-      val badge = channel.optBoolean(PushConstants.BADGE, true)
-      mChannel.setShowBadge(badge)
-      val sound = channel.optString(PushConstants.SOUND, "default")
-      val audioAttributes = AudioAttributes.Builder()
-        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-        .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build()
-      if (PushConstants.SOUND_RINGTONE == sound) {
-        mChannel.setSound(Settings.System.DEFAULT_RINGTONE_URI, audioAttributes)
-      } else if (sound != null && sound.isEmpty()) {
-        // Disable sound for this notification channel if an empty string is passed.
-        // https://stackoverflow.com/a/47144981/6194193
-        mChannel.setSound(null, null)
-      } else if (sound != null && !sound.contentEquals(PushConstants.SOUND_DEFAULT)) {
-        val soundUri =
-          Uri.parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + packageName + "/raw/" + sound)
-        mChannel.setSound(soundUri, audioAttributes)
-      } else {
-        mChannel.setSound(
-          Settings.System.DEFAULT_NOTIFICATION_URI,
+    }
+  }
+
+  /**
+   * Get the Notification Channel Sound Data from Channel Settings
+   *
+   * @param channelData
+   *
+   * @return Pair<Uri?, AudioAttributes?>
+   */
+  private fun getNotificationChannelSound(channelData: JSONObject): Pair<Uri?, AudioAttributes?> {
+    val audioAttributes = AudioAttributes.Builder()
+      .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+      .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+      .build()
+
+    val sound = channelData.optString(PushConstants.SOUND, PushConstants.SOUND_DEFAULT)
+
+    return when {
+      sound == PushConstants.SOUND_RINGTONE -> Pair(
+        Settings.System.DEFAULT_RINGTONE_URI,
+        audioAttributes
+      )
+
+      // Disable sound for this notification channel if an empty string is passed.
+      // https://stackoverflow.com/a/47144981/6194193
+      sound.isEmpty() -> Pair(null, null)
+
+      // E.g. android.resource://org.apache.cordova/raw/<SOUND>
+      sound != PushConstants.SOUND_DEFAULT -> {
+        val scheme = ContentResolver.SCHEME_ANDROID_RESOURCE
+        val packageName = applicationContext.packageName
+
+        Pair(
+          Uri.parse("${scheme}://$packageName/raw/$sound"),
           audioAttributes
         )
       }
 
-      // If vibration settings is an array set vibration pattern, else set enable
-      // vibration.
-      val pattern = channel.optJSONArray(PushConstants.CHANNEL_VIBRATION)
-      if (pattern != null) {
-        val patternLength = pattern.length()
-        val patternArray = LongArray(patternLength)
-        for (i in 0 until patternLength) {
-          patternArray[i] = pattern.optLong(i)
-        }
-        mChannel.vibrationPattern = patternArray
-      } else {
-        val vibrate = channel.optBoolean(PushConstants.CHANNEL_VIBRATION, true)
-        mChannel.enableVibration(vibrate)
-      }
-      notificationManager.createNotificationChannel(mChannel)
+      else -> Pair(Settings.System.DEFAULT_NOTIFICATION_URI, audioAttributes)
     }
   }
 
+  /**
+   * Get the Notification Channel Vibration Data from Channel Settings
+   *
+   * @param channelData
+   *
+   * @return Pair<Boolean, LongArray?>
+   */
+  private fun getNotificationChannelVibration(channelData: JSONObject): Pair<Boolean, LongArray?> {
+    var patternArray: LongArray? = null
+    val mVibrationPattern = channelData.optJSONArray(PushConstants.CHANNEL_VIBRATION)
+
+    if (mVibrationPattern != null) {
+      val patternLength = mVibrationPattern.length()
+      patternArray = LongArray(patternLength)
+
+      for (i in 0 until patternLength) {
+        patternArray[i] = mVibrationPattern.optLong(i)
+      }
+    }
+
+    return Pair(
+      channelData.optBoolean(PushConstants.CHANNEL_VIBRATION, true),
+      patternArray
+    )
+  }
+
+  /**
+   * Creates Default Notification Channel if Needed
+   * Only called for API 26 or higher
+   *
+   * @param options
+   */
   @TargetApi(26)
   private fun createDefaultNotificationChannelIfNeeded(options: JSONObject?) {
-    var id: String
     // only call on Android O and above
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      val notificationManager = cordova.activity
-        .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+      var id: String
+
       val channels = notificationManager.notificationChannels
       for (i in channels.indices) {
         id = channels[i].id
@@ -149,11 +251,10 @@ class PushPlugin : CordovaPlugin(), PushConstants {
       }
       try {
         options!!.put(PushConstants.CHANNEL_ID, PushConstants.DEFAULT_CHANNEL_ID)
-        val appName = appName
         options.putOpt(PushConstants.CHANNEL_DESCRIPTION, appName)
         createChannel(options)
       } catch (e: JSONException) {
-        Log.e(LOG_TAG, "execute: Got JSON Exception " + e.message)
+        Log.e(TAG, "execute: Got JSON Exception " + e.message)
       }
     }
   }
@@ -163,13 +264,15 @@ class PushPlugin : CordovaPlugin(), PushConstants {
     data: JSONArray,
     callbackContext: CallbackContext
   ): Boolean {
-    Log.v(LOG_TAG, "execute: action=$action")
+    Log.v(TAG, "Execute: Action = $action")
+
     gWebView = webView
+
     if (PushConstants.INITIALIZE == action) {
       cordova.threadPool.execute(Runnable {
         pushContext = callbackContext
         var jo: JSONObject? = null
-        Log.v(LOG_TAG, "execute: data=$data")
+        Log.v(TAG, "execute: data=$data")
         val sharedPref = applicationContext.getSharedPreferences(
           PushConstants.COM_ADOBE_PHONEGAP_PUSH,
           Context.MODE_PRIVATE
@@ -181,25 +284,25 @@ class PushPlugin : CordovaPlugin(), PushConstants {
 
           // If no NotificationChannels exist create the default one
           createDefaultNotificationChannelIfNeeded(jo)
-          Log.v(LOG_TAG, "execute: jo=$jo")
+          Log.v(TAG, "execute: jo=$jo")
           senderID = getStringResourceByName(PushConstants.GCM_DEFAULT_SENDER_ID)
-          Log.v(LOG_TAG, "execute: senderID=$senderID")
+          Log.v(TAG, "execute: senderID=$senderID")
           try {
             token = FirebaseInstanceId.getInstance().token
           } catch (e: IllegalStateException) {
-            Log.e(LOG_TAG, "Exception raised while getting Firebase token " + e.message)
+            Log.e(TAG, "Exception raised while getting Firebase token " + e.message)
           }
           if (token == null) {
             try {
               token = FirebaseInstanceId.getInstance().getToken(senderID, PushConstants.FCM)
             } catch (e: IllegalStateException) {
-              Log.e(LOG_TAG, "Exception raised while getting Firebase token " + e.message)
+              Log.e(TAG, "Exception raised while getting Firebase token " + e.message)
             }
           }
           if ("" != token) {
             val json = JSONObject().put(PushConstants.REGISTRATION_ID, token)
             json.put(PushConstants.REGISTRATION_TYPE, PushConstants.FCM)
-            Log.v(LOG_TAG, "onRegistered: $json")
+            Log.v(TAG, "onRegistered: $json")
             val topics = jo.optJSONArray(PushConstants.TOPICS)
             subscribeToTopics(topics, registration_id)
             sendEvent(json)
@@ -208,13 +311,13 @@ class PushPlugin : CordovaPlugin(), PushConstants {
             return@Runnable
           }
         } catch (e: JSONException) {
-          Log.e(LOG_TAG, "execute: Got JSON Exception " + e.message)
+          Log.e(TAG, "execute: Got JSON Exception " + e.message)
           callbackContext.error(e.message)
         } catch (e: IOException) {
-          Log.e(LOG_TAG, "execute: Got IO Exception " + e.message)
+          Log.e(TAG, "execute: Got IO Exception " + e.message)
           callbackContext.error(e.message)
         } catch (e: NotFoundException) {
-          Log.e(LOG_TAG, "execute: Got Resources NotFoundException " + e.message)
+          Log.e(TAG, "execute: Got Resources NotFoundException " + e.message)
           callbackContext.error(e.message)
         }
         if (jo != null) {
@@ -222,12 +325,12 @@ class PushPlugin : CordovaPlugin(), PushConstants {
           try {
             editor.putString(PushConstants.ICON, jo.getString(PushConstants.ICON))
           } catch (e: JSONException) {
-            Log.d(LOG_TAG, "no icon option")
+            Log.d(TAG, "no icon option")
           }
           try {
             editor.putString(PushConstants.ICON_COLOR, jo.getString(PushConstants.ICON_COLOR))
           } catch (e: JSONException) {
-            Log.d(LOG_TAG, "no iconColor option")
+            Log.d(TAG, "no iconColor option")
           }
           val clearBadge = jo.optBoolean(PushConstants.CLEAR_BADGE, false)
           if (clearBadge) {
@@ -250,7 +353,7 @@ class PushPlugin : CordovaPlugin(), PushConstants {
           editor.commit()
         }
         if (!gCachedExtras.isEmpty()) {
-          Log.v(LOG_TAG, "sending cached extras")
+          Log.v(TAG, "sending cached extras")
           synchronized(gCachedExtras) {
             val gCachedExtrasIterator: Iterator<Bundle> = gCachedExtras.iterator()
             while (gCachedExtrasIterator.hasNext()) {
@@ -272,7 +375,7 @@ class PushPlugin : CordovaPlugin(), PushConstants {
             unsubscribeFromTopics(topics, registration_id)
           } else {
             FirebaseInstanceId.getInstance().deleteInstanceId()
-            Log.v(LOG_TAG, "UNREGISTER")
+            Log.v(TAG, "UNREGISTER")
 
             // Remove shared prefs
             val editor = sharedPref.edit()
@@ -286,7 +389,7 @@ class PushPlugin : CordovaPlugin(), PushConstants {
           }
           callbackContext.success()
         } catch (e: IOException) {
-          Log.e(LOG_TAG, "execute: Got JSON Exception " + e.message)
+          Log.e(TAG, "execute: Got JSON Exception " + e.message)
           callbackContext.error(e.message)
         }
       }
@@ -297,7 +400,7 @@ class PushPlugin : CordovaPlugin(), PushConstants {
         val jo = JSONObject()
         try {
           Log.d(
-            LOG_TAG,
+            TAG,
             "has permission: " + NotificationManagerCompat.from(
               applicationContext
             )
@@ -318,7 +421,7 @@ class PushPlugin : CordovaPlugin(), PushConstants {
       }
     } else if (PushConstants.SET_APPLICATION_ICON_BADGE_NUMBER == action) {
       cordova.threadPool.execute {
-        Log.v(LOG_TAG, "setApplicationIconBadgeNumber: data=$data")
+        Log.v(TAG, "setApplicationIconBadgeNumber: data=$data")
         try {
           setApplicationIconBadgeNumber(
             applicationContext,
@@ -331,7 +434,7 @@ class PushPlugin : CordovaPlugin(), PushConstants {
       }
     } else if (PushConstants.GET_APPLICATION_ICON_BADGE_NUMBER == action) {
       cordova.threadPool.execute {
-        Log.v(LOG_TAG, "getApplicationIconBadgeNumber")
+        Log.v(TAG, "getApplicationIconBadgeNumber")
         callbackContext.success(
           getApplicationIconBadgeNumber(
             applicationContext
@@ -340,7 +443,7 @@ class PushPlugin : CordovaPlugin(), PushConstants {
       }
     } else if (PushConstants.CLEAR_ALL_NOTIFICATIONS == action) {
       cordova.threadPool.execute {
-        Log.v(LOG_TAG, "clearAllNotifications")
+        Log.v(TAG, "clearAllNotifications")
         clearAllNotifications()
         callbackContext.success()
       }
@@ -401,7 +504,7 @@ class PushPlugin : CordovaPlugin(), PushConstants {
       // clearing a single notification
       cordova.threadPool.execute {
         try {
-          Log.v(LOG_TAG, "clearNotification")
+          Log.v(TAG, "clearNotification")
           val id = data.getInt(0)
           clearNotification(id)
           callbackContext.success()
@@ -410,28 +513,40 @@ class PushPlugin : CordovaPlugin(), PushConstants {
         }
       }
     } else {
-      Log.e(LOG_TAG, "Invalid action : $action")
+      Log.e(TAG, "Invalid action : $action")
       callbackContext.sendPluginResult(PluginResult(PluginResult.Status.INVALID_ACTION))
       return false
     }
     return true
   }
 
+  /**
+   *
+   */
   override fun initialize(cordova: CordovaInterface, webView: CordovaWebView) {
     super.initialize(cordova, webView)
     isInForeground = true
   }
 
+  /**
+   *
+   */
   override fun onPause(multitasking: Boolean) {
     super.onPause(multitasking)
     isInForeground = false
   }
 
+  /**
+   *
+   */
   override fun onResume(multitasking: Boolean) {
     super.onResume(multitasking)
     isInForeground = true
   }
 
+  /**
+   *
+   */
   override fun onDestroy() {
     super.onDestroy()
     isInForeground = false
@@ -446,15 +561,10 @@ class PushPlugin : CordovaPlugin(), PushConstants {
   }
 
   private fun clearAllNotifications() {
-    val notificationManager = cordova.activity
-      .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
     notificationManager.cancelAll()
   }
 
   private fun clearNotification(id: Int) {
-    val notificationManager = cordova.activity
-      .getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-    val appName = appName
     notificationManager.cancel(appName, id)
   }
 
@@ -470,7 +580,7 @@ class PushPlugin : CordovaPlugin(), PushConstants {
 
   private fun subscribeToTopic(topic: String?, registrationToken: String) {
     if (topic != null) {
-      Log.d(LOG_TAG, "Subscribing to topic: $topic")
+      Log.d(TAG, "Subscribing to topic: $topic")
       FirebaseMessaging.getInstance().subscribeToTopic(topic)
     }
   }
@@ -487,27 +597,31 @@ class PushPlugin : CordovaPlugin(), PushConstants {
 
   private fun unsubscribeFromTopic(topic: String?, registrationToken: String) {
     if (topic != null) {
-      Log.d(LOG_TAG, "Unsubscribing to topic: $topic")
+      Log.d(TAG, "Unsubscribing to topic: $topic")
       FirebaseMessaging.getInstance().unsubscribeFromTopic(topic)
     }
   }
 
   private fun getStringResourceByName(aString: String): String {
-    val activity: Activity = cordova.activity
+    val activity: Activity = activity
     val packageName = activity.packageName
     val resId = activity.resources.getIdentifier(aString, "string", packageName)
     return activity.getString(resId)
   }
 
   companion object {
-    var isInForeground: Boolean = false
+    private const val TAG: String = "Push_PushPlugin"
 
-    val LOG_TAG = "Push_Plugin"
+    var isInForeground: Boolean = false
     private var pushContext: CallbackContext? = null
     private var gWebView: CordovaWebView? = null
     private val gCachedExtras = Collections.synchronizedList(ArrayList<Bundle>())
 
     private var registration_id = ""
+
+    /**
+     *
+     */
     fun sendEvent(_json: JSONObject?) {
       val pluginResult = PluginResult(PluginResult.Status.OK, _json)
       pluginResult.keepCallback = true
@@ -516,6 +630,9 @@ class PushPlugin : CordovaPlugin(), PushConstants {
       }
     }
 
+    /**
+     * @todo delete?
+     */
     fun sendError(message: String?) {
       val pluginResult = PluginResult(PluginResult.Status.ERROR, message)
       pluginResult.keepCallback = true
@@ -524,35 +641,45 @@ class PushPlugin : CordovaPlugin(), PushConstants {
       }
     }
 
-    /*
-   * Sends the pushbundle extras to the client application. If the client
-   * application isn't currently active and the no-cache flag is not set, it is
-   * cached for later processing.
-   */
+    /**
+     * Sends the pushbundle extras to the client application. If the client
+     * application isn't currently active and the no-cache flag is not set, it is
+     * cached for later processing.
+     *
+     * @param extras
+     */
     @JvmStatic
     fun sendExtras(extras: Bundle?) {
-      if (extras != null) {
-        val noCache = extras.getString(PushConstants.NO_CACHE)
+      extras?.let {
+        val noCache = it.getString(PushConstants.NO_CACHE)
+
         if (gWebView != null) {
           sendEvent(convertBundleToJson(extras))
-        } else if ("1" != noCache) {
-          Log.v(LOG_TAG, "sendExtras: caching extras to send at a later time.")
+        } else if (noCache != "1") {
+          Log.v(TAG, "sendExtras: Caching extras to send at a later time.")
           gCachedExtras.add(extras)
         }
       }
     }
 
-    /*
-   * Retrives badge count from SharedPreferences
-   */
+    /**
+     * Retrives badge count from SharedPreferences
+     *
+     * @param context
+     *
+     * @return Int
+     */
     fun getApplicationIconBadgeNumber(context: Context): Int {
       val settings = context.getSharedPreferences(PushConstants.BADGE, Context.MODE_PRIVATE)
       return settings.getInt(PushConstants.BADGE, 0)
     }
 
-    /*
-   * Sets badge count on application icon and in SharedPreferences
-   */
+    /**
+     * Sets badge count on application icon and in SharedPreferences
+     *
+     * @param context
+     * @param badgeCount
+     */
     @JvmStatic
     fun setApplicationIconBadgeNumber(context: Context, badgeCount: Int) {
       if (badgeCount > 0) {
@@ -567,10 +694,17 @@ class PushPlugin : CordovaPlugin(), PushConstants {
     }
 
     /*
-   * serializes a bundle to JSON.
+   *
    */
+    /**
+     * Serializes a bundle to JSON.
+     *
+     * @param extras
+     *
+     * @return JSONObject|null
+     */
     private fun convertBundleToJson(extras: Bundle): JSONObject? {
-      Log.d(LOG_TAG, "convert extras to json")
+      Log.d(TAG, "convert extras to json")
       try {
         val json = JSONObject()
         val additionalData = JSONObject()
@@ -589,7 +723,7 @@ class PushPlugin : CordovaPlugin(), PushConstants {
         while (it.hasNext()) {
           val key = it.next()
           val value = extras[key]
-          Log.d(LOG_TAG, "key = $key")
+          Log.d(TAG, "key = $key")
           if (jsonKeySet.contains(key)) {
             json.put(key, value)
           } else if (key == PushConstants.COLDSTART) {
@@ -615,17 +749,23 @@ class PushPlugin : CordovaPlugin(), PushConstants {
           }
         } // while
         json.put(PushConstants.ADDITIONAL_DATA, additionalData)
-        Log.v(LOG_TAG, "extrasToJSON: $json")
+        Log.v(TAG, "extrasToJSON: $json")
         return json
       } catch (e: JSONException) {
-        Log.e(LOG_TAG, "extrasToJSON: JSON exception")
+        Log.e(TAG, "extrasToJSON: JSON exception")
       }
       return null
     }
 
+    /**
+     * @return Boolean Active is true when the Cordova WebView is present.
+     */
     val isActive: Boolean
       get() = gWebView != null
 
+    /**
+     * @todo delete?
+     */
     protected fun setRegistrationID(token: String) {
       registration_id = token
     }
