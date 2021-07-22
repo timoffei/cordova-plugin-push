@@ -29,6 +29,174 @@ import java.util.*
 @Suppress("HardCodedStringLiteral")
 @SuppressLint("LogConditional")
 class PushPlugin : CordovaPlugin() {
+  companion object {
+    private const val TAG: String = "Push_PushPlugin"
+
+    /**
+     * Is the WebView in the foreground?
+     */
+    var isInForeground: Boolean = false
+
+    private var pushContext: CallbackContext? = null
+    private var gWebView: CordovaWebView? = null
+    private val gCachedExtras = Collections.synchronizedList(ArrayList<Bundle>())
+
+    private var registration_id = ""
+
+    /**
+     *
+     */
+    fun sendEvent(json: JSONObject?) {
+      val pluginResult = PluginResult(PluginResult.Status.OK, json)
+        .apply { keepCallback = true }
+      pushContext?.sendPluginResult(pluginResult)
+    }
+
+    /**
+     * Sends the pushbundle extras to the client application. If the client
+     * application isn't currently active and the no-cache flag is not set, it is
+     * cached for later processing.
+     *
+     * @param extras
+     */
+    @JvmStatic
+    fun sendExtras(extras: Bundle?) {
+      extras?.let {
+        val noCache = it.getString(PushConstants.NO_CACHE)
+
+        if (gWebView != null) {
+          sendEvent(convertBundleToJson(extras))
+        } else if (noCache != "1") {
+          Log.v(TAG, "sendExtras: Caching extras to send at a later time.")
+          gCachedExtras.add(extras)
+        }
+      }
+    }
+
+    /**
+     * Retrives badge count from SharedPreferences
+     *
+     * @param context
+     *
+     * @return Int
+     */
+    fun getApplicationIconBadgeNumber(context: Context): Int {
+      val settings = context.getSharedPreferences(PushConstants.BADGE, Context.MODE_PRIVATE)
+      return settings.getInt(PushConstants.BADGE, 0)
+    }
+
+    /**
+     * Sets badge count on application icon and in SharedPreferences
+     *
+     * @param context
+     * @param badgeCount
+     */
+    @JvmStatic
+    fun setApplicationIconBadgeNumber(context: Context, badgeCount: Int) {
+      if (badgeCount > 0) {
+        ShortcutBadger.applyCount(context, badgeCount)
+      } else {
+        ShortcutBadger.removeCount(context)
+      }
+
+      context.getSharedPreferences(PushConstants.BADGE, Context.MODE_PRIVATE)
+        .edit()?.apply {
+          putInt(PushConstants.BADGE, badgeCount.coerceAtLeast(0))
+          apply()
+        }
+    }
+
+    /**
+     * Serializes a bundle to JSON.
+     *
+     * @param extras
+     *
+     * @return JSONObject|null
+     */
+    private fun convertBundleToJson(extras: Bundle): JSONObject? {
+      Log.d(TAG, "Convert Extras to JSON")
+
+      try {
+        val json = JSONObject()
+        val additionalData = JSONObject()
+
+        // Add any keys that need to be in top level json to this set
+        val jsonKeySet: HashSet<String?> = HashSet<String?>()
+
+        Collections.addAll(
+          jsonKeySet,
+          PushConstants.TITLE,
+          PushConstants.MESSAGE,
+          PushConstants.COUNT,
+          PushConstants.SOUND,
+          PushConstants.IMAGE
+        )
+
+        val it: Iterator<String> = extras.keySet().iterator()
+
+        while (it.hasNext()) {
+          val key = it.next()
+          val value = extras[key]
+
+          Log.d(TAG, "Extras Iteration: key=$key")
+
+          when {
+            jsonKeySet.contains(key) -> {
+              json.put(key, value)
+            }
+
+            key == PushConstants.COLDSTART -> {
+              additionalData.put(key, extras.getBoolean(PushConstants.COLDSTART))
+            }
+
+            key == PushConstants.FOREGROUND -> {
+              additionalData.put(key, extras.getBoolean(PushConstants.FOREGROUND))
+            }
+
+            key == PushConstants.DISMISSED -> {
+              additionalData.put(key, extras.getBoolean(PushConstants.DISMISSED))
+            }
+
+            value is String -> {
+              try {
+                // Try to figure out if the value is another JSON object
+                when {
+                  value.startsWith("{") -> {
+                    additionalData.put(key, JSONObject(value))
+                  }
+
+                  value.startsWith("[") -> {
+                    additionalData.put(key, JSONArray(value))
+                  }
+
+                  else -> {
+                    additionalData.put(key, value)
+                  }
+                }
+              } catch (e: Exception) {
+                additionalData.put(key, value)
+              }
+            }
+          }
+        }
+
+        json.put(PushConstants.ADDITIONAL_DATA, additionalData)
+
+        Log.v(TAG, "Extras To JSON Result: $json")
+        return json
+      } catch (e: JSONException) {
+        Log.e(TAG, "convertBundleToJson had a JSON Exception")
+      }
+
+      return null
+    }
+
+    /**
+     * @return Boolean Active is true when the Cordova WebView is present.
+     */
+    val isActive: Boolean
+      get() = gWebView != null
+  }
 
   /**
    * Gets Cordova's AppCompatActivity
@@ -737,175 +905,5 @@ class PushPlugin : CordovaPlugin() {
   private fun getStringResourceByName(aString: String): String {
     val resId = activity.resources.getIdentifier(aString, "string", activity.packageName)
     return activity.getString(resId)
-  }
-
-  companion object {
-    private const val TAG: String = "Push_PushPlugin"
-
-    /**
-     * Is the WebView in the foreground?
-     */
-    var isInForeground: Boolean = false
-
-    private var pushContext: CallbackContext? = null
-    private var gWebView: CordovaWebView? = null
-    private val gCachedExtras = Collections.synchronizedList(ArrayList<Bundle>())
-
-    private var registration_id = ""
-
-    /**
-     *
-     */
-    fun sendEvent(json: JSONObject?) {
-      val pluginResult = PluginResult(PluginResult.Status.OK, json)
-        .apply { keepCallback = true }
-      pushContext?.sendPluginResult(pluginResult)
-    }
-
-    /**
-     * Sends the pushbundle extras to the client application. If the client
-     * application isn't currently active and the no-cache flag is not set, it is
-     * cached for later processing.
-     *
-     * @param extras
-     */
-    @JvmStatic
-    fun sendExtras(extras: Bundle?) {
-      extras?.let {
-        val noCache = it.getString(PushConstants.NO_CACHE)
-
-        if (gWebView != null) {
-          sendEvent(convertBundleToJson(extras))
-        } else if (noCache != "1") {
-          Log.v(TAG, "sendExtras: Caching extras to send at a later time.")
-          gCachedExtras.add(extras)
-        }
-      }
-    }
-
-    /**
-     * Retrives badge count from SharedPreferences
-     *
-     * @param context
-     *
-     * @return Int
-     */
-    fun getApplicationIconBadgeNumber(context: Context): Int {
-      val settings = context.getSharedPreferences(PushConstants.BADGE, Context.MODE_PRIVATE)
-      return settings.getInt(PushConstants.BADGE, 0)
-    }
-
-    /**
-     * Sets badge count on application icon and in SharedPreferences
-     *
-     * @param context
-     * @param badgeCount
-     */
-    @JvmStatic
-    fun setApplicationIconBadgeNumber(context: Context, badgeCount: Int) {
-      if (badgeCount > 0) {
-        ShortcutBadger.applyCount(context, badgeCount)
-      } else {
-        ShortcutBadger.removeCount(context)
-      }
-
-      context.getSharedPreferences(PushConstants.BADGE, Context.MODE_PRIVATE)
-        .edit()?.apply {
-          putInt(PushConstants.BADGE, badgeCount.coerceAtLeast(0))
-          apply()
-        }
-    }
-
-    /**
-     * Serializes a bundle to JSON.
-     *
-     * @param extras
-     *
-     * @return JSONObject|null
-     */
-    private fun convertBundleToJson(extras: Bundle): JSONObject? {
-      Log.d(TAG, "Convert Extras to JSON")
-
-      try {
-        val json = JSONObject()
-        val additionalData = JSONObject()
-
-        // Add any keys that need to be in top level json to this set
-        val jsonKeySet: HashSet<String?> = HashSet<String?>()
-
-        Collections.addAll(
-          jsonKeySet,
-          PushConstants.TITLE,
-          PushConstants.MESSAGE,
-          PushConstants.COUNT,
-          PushConstants.SOUND,
-          PushConstants.IMAGE
-        )
-
-        val it: Iterator<String> = extras.keySet().iterator()
-
-        while (it.hasNext()) {
-          val key = it.next()
-          val value = extras[key]
-
-          Log.d(TAG, "Extras Iteration: key=$key")
-
-          when {
-            jsonKeySet.contains(key) -> {
-              json.put(key, value)
-            }
-
-            key == PushConstants.COLDSTART -> {
-              additionalData.put(key, extras.getBoolean(PushConstants.COLDSTART))
-            }
-
-            key == PushConstants.FOREGROUND -> {
-              additionalData.put(key, extras.getBoolean(PushConstants.FOREGROUND))
-            }
-
-            key == PushConstants.DISMISSED -> {
-              additionalData.put(key, extras.getBoolean(PushConstants.DISMISSED))
-            }
-
-            value is String -> {
-              try {
-                // Try to figure out if the value is another JSON object
-                when {
-                  value.startsWith("{") -> {
-                    additionalData.put(key, JSONObject(value))
-                  }
-
-                  value.startsWith("[") -> {
-                    additionalData.put(key, JSONArray(value))
-                  }
-
-                  else -> {
-                    additionalData.put(key, value)
-                  }
-                }
-              } catch (e: Exception) {
-                additionalData.put(key, value)
-              }
-            }
-          }
-        }
-
-        json.put(PushConstants.ADDITIONAL_DATA, additionalData)
-
-        Log.v(TAG, "Extras To JSON Result: $json")
-        return json
-      } catch (e: JSONException) {
-        Log.e(TAG, "convertBundleToJson had a JSON Exception")
-      }
-
-      return null
-    }
-
-    /**
-     * @return Boolean Active is true when the Cordova WebView is present.
-     */
-    val isActive: Boolean
-      get() = gWebView != null
-
   }
 }
