@@ -284,19 +284,7 @@ class PushPlugin : CordovaPlugin() {
       PushConstants.CREATE_CHANNEL -> executeActionCreateChannel(data, callbackContext)
       PushConstants.DELETE_CHANNEL -> executeActionDeleteChannel(data, callbackContext)
       PushConstants.LIST_CHANNELS -> executeActionListChannels(callbackContext)
-      PushConstants.CLEAR_NOTIFICATION -> {
-        // clearing a single notification
-        cordova.threadPool.execute {
-          try {
-            Log.v(TAG, "clearNotification")
-            val id = data.getInt(0)
-            clearNotification(id)
-            callbackContext.success()
-          } catch (e: JSONException) {
-            callbackContext.error(e.message)
-          }
-        }
-      }
+      PushConstants.CLEAR_NOTIFICATION -> executeActionClearNotification(data, callbackContext)
       else -> {
         Log.e(TAG, "Invalid action : $action")
         callbackContext.sendPluginResult(PluginResult(PluginResult.Status.INVALID_ACTION))
@@ -638,8 +626,17 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
-  private fun executeActionClearNotification() {
-
+  private fun executeActionClearNotification(data: JSONArray, callbackContext: CallbackContext) {
+    cordova.threadPool.execute {
+      try {
+        val notificationId = data.getInt(0)
+        Log.v(TAG, "Execute::ClearNotification notificationId=$notificationId")
+        clearNotification(notificationId)
+        callbackContext.success()
+      } catch (e: JSONException) {
+        callbackContext.error(e.message)
+      }
+    }
   }
 
   /**
