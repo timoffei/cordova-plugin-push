@@ -764,15 +764,6 @@ class PushPlugin : CordovaPlugin() {
     }
 
     /**
-     * @todo delete?
-     */
-    fun sendError(message: String?) {
-      val pluginResult = PluginResult(PluginResult.Status.ERROR, message)
-        .apply { keepCallback = true }
-      pushContext?.sendPluginResult(pluginResult)
-    }
-
-    /**
      * Sends the pushbundle extras to the client application. If the client
      * application isn't currently active and the no-cache flag is not set, it is
      * cached for later processing.
@@ -917,11 +908,5 @@ class PushPlugin : CordovaPlugin() {
     val isActive: Boolean
       get() = gWebView != null
 
-    /**
-     * @todo delete?
-     */
-    protected fun setRegistrationID(token: String) {
-      registration_id = token
-    }
   }
 }
