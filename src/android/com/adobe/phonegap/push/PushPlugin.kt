@@ -667,16 +667,20 @@ class PushPlugin : CordovaPlugin() {
    *
    */
   override fun onDestroy() {
-    super.onDestroy()
     isInForeground = false
     gWebView = null
-    val prefs = applicationContext.getSharedPreferences(
+
+    // Clear Notification
+    applicationContext.getSharedPreferences(
       PushConstants.COM_ADOBE_PHONEGAP_PUSH,
       Context.MODE_PRIVATE
-    )
-    if (prefs.getBoolean(PushConstants.CLEAR_NOTIFICATIONS, true)) {
-      clearAllNotifications()
+    ).apply {
+      if (getBoolean(PushConstants.CLEAR_NOTIFICATIONS, true)) {
+        clearAllNotifications()
+      }
     }
+
+    super.onDestroy()
   }
 
   private fun clearAllNotifications() {
@@ -687,51 +691,63 @@ class PushPlugin : CordovaPlugin() {
     notificationManager.cancel(appName, id)
   }
 
+  /**
+   * Subscribe to multiple topics
+   */
   private fun subscribeToTopics(topics: JSONArray?, registrationToken: String) {
-    if (topics != null) {
-      var topic: String? = null
-      for (i in 0 until topics.length()) {
-        topic = topics.optString(i, null)
-        subscribeToTopic(topic, registrationToken)
+    topics?.let {
+      for (i in 0 until it.length()) {
+        val topicKey = it.optString(i, null)
+        subscribeToTopic(topicKey, registrationToken)
       }
     }
   }
 
-  private fun subscribeToTopic(topic: String?, registrationToken: String) {
-    if (topic != null) {
-      Log.d(TAG, "Subscribing to topic: $topic")
-      FirebaseMessaging.getInstance().subscribeToTopic(topic)
-    }
-  }
-
+  /**
+   * Unsubscribe from multiple topics
+   */
   private fun unsubscribeFromTopics(topics: JSONArray?, registrationToken: String) {
-    if (topics != null) {
-      var topic: String? = null
-      for (i in 0 until topics.length()) {
-        topic = topics.optString(i, null)
+    topics?.let {
+      for (i in 0 until it.length()) {
+        val topic = it.optString(i, null)
         unsubscribeFromTopic(topic, registrationToken)
       }
     }
   }
 
+  /**
+   * Subscribe to one topic
+   */
+  private fun subscribeToTopic(topic: String?, registrationToken: String) {
+    topic?.let {
+      Log.d(TAG, "Subscribing to Topic: $it")
+      FirebaseMessaging.getInstance().subscribeToTopic(it)
+    }
+  }
+
+  /**
+   * Unsubscribe to one topic
+   */
   private fun unsubscribeFromTopic(topic: String?, registrationToken: String) {
-    if (topic != null) {
-      Log.d(TAG, "Unsubscribing to topic: $topic")
-      FirebaseMessaging.getInstance().unsubscribeFromTopic(topic)
+    topic?.let {
+      Log.d(TAG, "Unsubscribing to topic: $it")
+      FirebaseMessaging.getInstance().unsubscribeFromTopic(it)
     }
   }
 
   private fun getStringResourceByName(aString: String): String {
-    val activity: Activity = activity
-    val packageName = activity.packageName
-    val resId = activity.resources.getIdentifier(aString, "string", packageName)
+    val resId = activity.resources.getIdentifier(aString, "string", activity.packageName)
     return activity.getString(resId)
   }
 
   companion object {
     private const val TAG: String = "Push_PushPlugin"
 
+    /**
+     * Is the WebView in the foreground?
+     */
     var isInForeground: Boolean = false
+
     private var pushContext: CallbackContext? = null
     private var gWebView: CordovaWebView? = null
     private val gCachedExtras = Collections.synchronizedList(ArrayList<Bundle>())
@@ -741,12 +757,10 @@ class PushPlugin : CordovaPlugin() {
     /**
      *
      */
-    fun sendEvent(_json: JSONObject?) {
-      val pluginResult = PluginResult(PluginResult.Status.OK, _json)
-      pluginResult.keepCallback = true
-      if (pushContext != null) {
-        pushContext!!.sendPluginResult(pluginResult)
-      }
+    fun sendEvent(json: JSONObject?) {
+      val pluginResult = PluginResult(PluginResult.Status.OK, json)
+        .apply { keepCallback = true }
+      pushContext?.sendPluginResult(pluginResult)
     }
 
     /**
@@ -754,10 +768,8 @@ class PushPlugin : CordovaPlugin() {
      */
     fun sendError(message: String?) {
       val pluginResult = PluginResult(PluginResult.Status.ERROR, message)
-      pluginResult.keepCallback = true
-      if (pushContext != null) {
-        pushContext!!.sendPluginResult(pluginResult)
-      }
+        .apply { keepCallback = true }
+      pushContext?.sendPluginResult(pluginResult)
     }
 
     /**
@@ -806,15 +818,14 @@ class PushPlugin : CordovaPlugin() {
       } else {
         ShortcutBadger.removeCount(context)
       }
-      val editor = context.getSharedPreferences(PushConstants.BADGE, Context.MODE_PRIVATE)
-        .edit()
-      editor.putInt(PushConstants.BADGE, Math.max(badgeCount, 0))
-      editor.apply()
+
+      context.getSharedPreferences(PushConstants.BADGE, Context.MODE_PRIVATE)
+        .edit()?.apply {
+          putInt(PushConstants.BADGE, badgeCount.coerceAtLeast(0))
+          apply()
+        }
     }
 
-    /*
-   *
-   */
     /**
      * Serializes a bundle to JSON.
      *
@@ -823,13 +834,15 @@ class PushPlugin : CordovaPlugin() {
      * @return JSONObject|null
      */
     private fun convertBundleToJson(extras: Bundle): JSONObject? {
-      Log.d(TAG, "convert extras to json")
+      Log.d(TAG, "Convert Extras to JSON")
+
       try {
         val json = JSONObject()
         val additionalData = JSONObject()
 
         // Add any keys that need to be in top level json to this set
         val jsonKeySet: HashSet<String?> = HashSet<String?>()
+
         Collections.addAll(
           jsonKeySet,
           PushConstants.TITLE,
@@ -838,41 +851,63 @@ class PushPlugin : CordovaPlugin() {
           PushConstants.SOUND,
           PushConstants.IMAGE
         )
+
         val it: Iterator<String> = extras.keySet().iterator()
+
         while (it.hasNext()) {
           val key = it.next()
           val value = extras[key]
-          Log.d(TAG, "key = $key")
-          if (jsonKeySet.contains(key)) {
-            json.put(key, value)
-          } else if (key == PushConstants.COLDSTART) {
-            additionalData.put(key, extras.getBoolean(PushConstants.COLDSTART))
-          } else if (key == PushConstants.FOREGROUND) {
-            additionalData.put(key, extras.getBoolean(PushConstants.FOREGROUND))
-          } else if (key == PushConstants.DISMISSED) {
-            additionalData.put(key, extras.getBoolean(PushConstants.DISMISSED))
-          } else if (value is String) {
-            val strValue = value
-            try {
-              // Try to figure out if the value is another JSON object
-              if (strValue.startsWith("{")) {
-                additionalData.put(key, JSONObject(strValue))
-              } else if (strValue.startsWith("[")) {
-                additionalData.put(key, JSONArray(strValue))
-              } else {
+
+          Log.d(TAG, "Extras Iteration: key=$key")
+
+          when {
+            jsonKeySet.contains(key) -> {
+              json.put(key, value)
+            }
+
+            key == PushConstants.COLDSTART -> {
+              additionalData.put(key, extras.getBoolean(PushConstants.COLDSTART))
+            }
+
+            key == PushConstants.FOREGROUND -> {
+              additionalData.put(key, extras.getBoolean(PushConstants.FOREGROUND))
+            }
+
+            key == PushConstants.DISMISSED -> {
+              additionalData.put(key, extras.getBoolean(PushConstants.DISMISSED))
+            }
+
+            value is String -> {
+              try {
+                // Try to figure out if the value is another JSON object
+                when {
+                  value.startsWith("{") -> {
+                    additionalData.put(key, JSONObject(value))
+                  }
+
+                  value.startsWith("[") -> {
+                    additionalData.put(key, JSONArray(value))
+                  }
+
+                  else -> {
+                    additionalData.put(key, value)
+                  }
+                }
+              } catch (e: Exception) {
                 additionalData.put(key, value)
               }
-            } catch (e: Exception) {
-              additionalData.put(key, value)
             }
           }
-        } // while
+        }
+
         json.put(PushConstants.ADDITIONAL_DATA, additionalData)
-        Log.v(TAG, "extrasToJSON: $json")
+
+        Log.v(TAG, "Extras To JSON Result: $json")
         return json
       } catch (e: JSONException) {
-        Log.e(TAG, "extrasToJSON: JSON exception")
+        Log.e(TAG, "convertBundleToJson had a JSON Exception")
       }
+
       return null
     }
 
