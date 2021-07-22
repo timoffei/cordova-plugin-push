@@ -275,24 +275,10 @@ class PushPlugin : CordovaPlugin() {
       PushConstants.SET_APPLICATION_ICON_BADGE_NUMBER -> executeActionSetIconBadgeNumber(
         data, callbackContext
       )
-
-      PushConstants.GET_APPLICATION_ICON_BADGE_NUMBER -> {
-        cordova.threadPool.execute {
-          Log.v(TAG, "getApplicationIconBadgeNumber")
-          callbackContext.success(
-            getApplicationIconBadgeNumber(
-              applicationContext
-            )
-          )
-        }
-      }
-      PushConstants.CLEAR_ALL_NOTIFICATIONS -> {
-        cordova.threadPool.execute {
-          Log.v(TAG, "clearAllNotifications")
-          clearAllNotifications()
-          callbackContext.success()
-        }
-      }
+      PushConstants.GET_APPLICATION_ICON_BADGE_NUMBER -> executeActionGetIconBadgeNumber(
+        callbackContext
+      )
+      PushConstants.CLEAR_ALL_NOTIFICATIONS -> executeActionClearAllNotifications(callbackContext)
       PushConstants.SUBSCRIBE -> {
         // Subscribing for a topic
         cordova.threadPool.execute {
@@ -628,12 +614,19 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
-  private fun executeActionGetApplicationIconBadgeNumber() {
-
+  private fun executeActionGetIconBadgeNumber(callbackContext: CallbackContext) {
+    cordova.threadPool.execute {
+      Log.v(TAG, "Execute Get Badge Number")
+      callbackContext.success(getApplicationIconBadgeNumber(applicationContext))
+    }
   }
 
-  private fun executeActionClearAllNotifications() {
-
+  private fun executeActionClearAllNotifications(callbackContext: CallbackContext) {
+    cordova.threadPool.execute {
+      Log.v(TAG, "Execute Clear All Notifications")
+      clearAllNotifications()
+      callbackContext.success()
+    }
   }
 
   private fun executeActionSubscribe() {
