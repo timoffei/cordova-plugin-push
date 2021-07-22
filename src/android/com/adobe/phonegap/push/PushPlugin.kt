@@ -503,7 +503,13 @@ class PushPlugin : CordovaPlugin() {
 
       try {
         jo = data.getJSONObject(0).getJSONObject(PushConstants.ANDROID)
-        senderID = getStringResourceByName(PushConstants.GCM_DEFAULT_SENDER_ID)
+
+        val senderIdResId = activity.resources.getIdentifier(
+          PushConstants.GCM_DEFAULT_SENDER_ID,
+          "string",
+          activity.packageName
+        )
+        senderID = activity.getString(senderIdResId)
 
         // If no NotificationChannels exist create the default one
         createDefaultNotificationChannelIfNeeded(jo)
@@ -984,13 +990,5 @@ class PushPlugin : CordovaPlugin() {
       Log.d(TAG, "Unsubscribing to topic: $it")
       FirebaseMessaging.getInstance().unsubscribeFromTopic(it)
     }
-  }
-
-  /**
-   * Gets the string resource by name
-   */
-  private fun getStringResourceByName(aString: String): String {
-    val resId = activity.resources.getIdentifier(aString, "string", activity.packageName)
-    return activity.getString(resId)
   }
 }
