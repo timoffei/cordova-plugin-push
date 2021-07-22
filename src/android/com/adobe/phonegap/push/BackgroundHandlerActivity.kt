@@ -1,5 +1,6 @@
 package com.adobe.phonegap.push
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.NotificationManager
 import android.content.Intent
@@ -7,54 +8,58 @@ import android.os.Bundle
 import android.util.Log
 import androidx.core.app.RemoteInput
 
-class BackgroundHandlerActivity : Activity(), PushConstants {
+/**
+ * Background Handler Activity
+ */
+@Suppress("HardCodedStringLiteral")
+@SuppressLint("LongLogTag", "LogConditional")
+class BackgroundHandlerActivity : Activity() {
   companion object {
-    private const val LOG_TAG: String = "Push_BackgroundHandlerActivity"
+    private const val TAG: String = "Push_BackgroundHandlerActivity"
   }
 
-  /*
-   * this activity will be started if the user touches a notification that we own.
+  /**
+   * This activity will be started if the user touches a notification that we own.
    * We send it's data off to the push plugin for processing.
    * If needed, we boot up the main activity to kickstart the application.
+   *
+   * @param savedInstanceState
+   *
    * @see android.app.Activity#onCreate(android.os.Bundle)
    */
   public override fun onCreate(savedInstanceState: Bundle?) {
-    val gcm = FCMService()
-    val intent = intent
-    val notId = intent.extras!!.getInt(PushConstants.NOT_ID, 0)
-    Log.d(LOG_TAG, "not id = $notId")
-
-    gcm.setNotification(notId, "")
-
     super.onCreate(savedInstanceState)
-    Log.v(LOG_TAG, "onCreate")
 
-    val callback = getIntent().extras!!.getString("callback")
-    Log.d(LOG_TAG, "callback = $callback")
+    Log.v(TAG, "onCreate")
 
-    val startOnBackground = getIntent().extras!!
-      .getBoolean(PushConstants.START_IN_BACKGROUND, false)
+    intent.extras?.let { extras ->
+      val notId = extras.getInt(PushConstants.NOT_ID, 0)
+      val callback = extras.getString(PushConstants.CALLBACK)
+      val startOnBackground = extras.getBoolean(PushConstants.START_IN_BACKGROUND, false)
+      val dismissed = extras.getBoolean(PushConstants.DISMISSED, false)
 
-    val dismissed = getIntent().extras!!
-      .getBoolean(PushConstants.DISMISSED, false)
-    Log.d(LOG_TAG, "dismissed = $dismissed")
+      Log.d(TAG, "Not ID: $notId")
+      Log.d(TAG, "Callback: $callback")
+      Log.d(TAG, "Start In Background: $startOnBackground")
+      Log.d(TAG, "Dismissed: $dismissed")
 
-    if (!startOnBackground) {
-      val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-      notificationManager.cancel(FCMService.getAppName(this), notId)
-    }
+      FCMService().setNotification(notId, "")
 
-    val isPushPluginActive = PushPlugin.isActive
+      if (!startOnBackground) {
+        val notificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+        notificationManager.cancel(FCMService.getAppName(this), notId)
+      }
 
-    processPushBundle(isPushPluginActive, intent)
-    finish()
+      processPushBundle()
+      finish()
 
-    if (!dismissed) {
-      // Tap the notification, app should start.
-      if (!isPushPluginActive) {
-        forceMainActivityReload(false)
-      } else {
-        forceMainActivityReload(true)
+      if (!dismissed) {
+        // Tap the notification, app should start.
+        if (!PushPlugin.isActive) {
+          forceMainActivityReload(false)
+        } else {
+          forceMainActivityReload(true)
+        }
       }
     }
   }
@@ -63,11 +68,8 @@ class BackgroundHandlerActivity : Activity(), PushConstants {
    * Takes the pushBundle extras from the intent,
    * and sends it through to the PushPlugin for processing.
    */
-  private fun processPushBundle(isPushPluginActive: Boolean, intent: Intent): Boolean {
-    val extras = getIntent().extras
-    var remoteInput: Bundle? = null
-
-    if (extras != null) {
+  private fun processPushBundle() {
+    intent.extras?.let { extras ->
       var originalExtras = extras.getBundle(PushConstants.PUSH_BUNDLE)
 
       if (originalExtras == null) {
@@ -78,7 +80,7 @@ class BackgroundHandlerActivity : Activity(), PushConstants {
       }
 
       originalExtras.putBoolean(PushConstants.FOREGROUND, false)
-      originalExtras.putBoolean(PushConstants.COLDSTART, !isPushPluginActive)
+      originalExtras.putBoolean(PushConstants.COLDSTART, !PushPlugin.isActive)
       originalExtras.putBoolean(PushConstants.DISMISSED, extras.getBoolean(PushConstants.DISMISSED))
       originalExtras.putString(
         PushConstants.ACTION_CALLBACK,
@@ -86,42 +88,43 @@ class BackgroundHandlerActivity : Activity(), PushConstants {
       )
       originalExtras.remove(PushConstants.NO_CACHE)
 
-      remoteInput = RemoteInput.getResultsFromIntent(intent)
+      RemoteInput.getResultsFromIntent(intent)?.apply {
+        val reply = getCharSequence(PushConstants.INLINE_REPLY).toString()
+        Log.d(TAG, "Inline Reply: $reply")
 
-      if (remoteInput != null) {
-        val inputString = remoteInput.getCharSequence(PushConstants.INLINE_REPLY).toString()
-        Log.d(LOG_TAG, "response: $inputString")
-        originalExtras.putString(PushConstants.INLINE_REPLY, inputString)
+        originalExtras.putString(PushConstants.INLINE_REPLY, reply)
       }
 
       PushPlugin.sendExtras(originalExtras)
     }
-    return remoteInput == null
   }
 
   /**
    * Forces the main activity to re-launch if it's unloaded.
+   *
+   * @param startOnBackground Boolean
    */
   private fun forceMainActivityReload(startOnBackground: Boolean) {
-    val pm = packageManager
-    val launchIntent = pm.getLaunchIntentForPackage(applicationContext.packageName)
-    val extras = intent.extras
+    val launchIntent = packageManager.getLaunchIntentForPackage(applicationContext.packageName)
 
-    if (extras != null) {
-      val originalExtras = extras.getBundle(PushConstants.PUSH_BUNDLE)
+    intent.extras?.let { extras ->
+      launchIntent?.apply {
+        extras.getBundle(PushConstants.PUSH_BUNDLE)?.let { originalExtras ->
+          putExtras(originalExtras)
+        }
 
-      if (originalExtras != null) {
-        launchIntent!!.putExtras(originalExtras)
+        addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+        addFlags(Intent.FLAG_FROM_BACKGROUND)
+        putExtra(PushConstants.START_IN_BACKGROUND, startOnBackground)
       }
-
-      launchIntent!!.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-      launchIntent.addFlags(Intent.FLAG_FROM_BACKGROUND)
-      launchIntent.putExtra(PushConstants.START_IN_BACKGROUND, startOnBackground)
     }
 
     startActivity(launchIntent)
   }
 
+  /**
+   *
+   */
   override fun onResume() {
     super.onResume()
 
