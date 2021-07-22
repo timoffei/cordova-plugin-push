@@ -1,24 +1,30 @@
 package com.adobe.phonegap.push
 
+import android.annotation.SuppressLint
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.util.Log
 
-class PushDismissedHandler : BroadcastReceiver(), PushConstants {
+/**
+ *
+ */
+@Suppress("HardCodedStringLiteral")
+@SuppressLint("LongLogTag")
+class PushDismissedHandler : BroadcastReceiver() {
   companion object {
-    private const val LOG_TAG: String = "Push_DismissedHandler"
+    private const val TAG: String = "Push_PushDismissedHandler"
   }
 
+  /**
+   * @param context
+   * @param intent
+   */
   override fun onReceive(context: Context, intent: Intent) {
-    val extras = intent.extras
-    val fcm = FCMService()
-    val action = intent.action
-    val notID = intent.getIntExtra(PushConstants.NOT_ID, 0)
-    if (action == PushConstants.PUSH_DISMISSED) {
-      Log.d(LOG_TAG, "PushDismissedHandler = $extras")
-      Log.d(LOG_TAG, "not id = $notID")
-      fcm.setNotification(notID, "")
+    if (intent.action == PushConstants.PUSH_DISMISSED) {
+      val notID = intent.getIntExtra(PushConstants.NOT_ID, 0)
+      Log.d(TAG, "not id = $notID")
+      FCMService().setNotification(notID, "")
     }
   }
 }
