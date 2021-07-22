@@ -898,8 +898,8 @@ class PushPlugin : CordovaPlugin() {
    * Handle when the view is being paused
    */
   override fun onPause(multitasking: Boolean) {
-    super.onPause(multitasking)
     isInForeground = false
+    super.onPause(multitasking)
   }
 
   /**
