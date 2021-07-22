@@ -41,8 +41,6 @@ class PushPlugin : CordovaPlugin() {
     private var gWebView: CordovaWebView? = null
     private val gCachedExtras = Collections.synchronizedList(ArrayList<Bundle>())
 
-    private var registration_id = ""
-
     /**
      *
      */
@@ -535,7 +533,7 @@ class PushPlugin : CordovaPlugin() {
           Log.v(TAG, formatLogMessage("onRegistered=$registration"))
 
           val topics = jo.optJSONArray(PushConstants.TOPICS)
-          subscribeToTopics(topics, registration_id)
+          subscribeToTopics(topics)
 
           sendEvent(registration)
         } else {
@@ -666,8 +664,8 @@ class PushPlugin : CordovaPlugin() {
         )
         val topics = data.optJSONArray(0)
 
-        if (topics != null && registration_id != "") {
-          unsubscribeFromTopics(topics, registration_id)
+        if (topics != null) {
+          unsubscribeFromTopics(topics)
         } else {
           FirebaseInstanceId.getInstance().deleteInstanceId()
           Log.v(TAG, formatLogMessage("UNREGISTER"))
@@ -791,7 +789,7 @@ class PushPlugin : CordovaPlugin() {
       try {
         Log.v(TAG, "Execute::Subscribe")
         val topic = data.getString(0)
-        subscribeToTopic(topic, registration_id)
+        subscribeToTopic(topic)
         callbackContext.success()
       } catch (e: JSONException) {
         callbackContext.error(e.message)
@@ -809,7 +807,7 @@ class PushPlugin : CordovaPlugin() {
       try {
         Log.v(TAG, "Execute::Unsubscribe")
         val topic = data.getString(0)
-        unsubscribeFromTopic(topic, registration_id)
+        unsubscribeFromTopic(topic)
         callbackContext.success()
       } catch (e: JSONException) {
         callbackContext.error(e.message)
@@ -947,11 +945,11 @@ class PushPlugin : CordovaPlugin() {
   /**
    * Subscribe to multiple topics
    */
-  private fun subscribeToTopics(topics: JSONArray?, registrationToken: String) {
+  private fun subscribeToTopics(topics: JSONArray?) {
     topics?.let {
       for (i in 0 until it.length()) {
         val topicKey = it.optString(i, null)
-        subscribeToTopic(topicKey, registrationToken)
+        subscribeToTopic(topicKey)
       }
     }
   }
@@ -959,11 +957,11 @@ class PushPlugin : CordovaPlugin() {
   /**
    * Unsubscribe from multiple topics
    */
-  private fun unsubscribeFromTopics(topics: JSONArray?, registrationToken: String) {
+  private fun unsubscribeFromTopics(topics: JSONArray?) {
     topics?.let {
       for (i in 0 until it.length()) {
         val topic = it.optString(i, null)
-        unsubscribeFromTopic(topic, registrationToken)
+        unsubscribeFromTopic(topic)
       }
     }
   }
@@ -971,7 +969,7 @@ class PushPlugin : CordovaPlugin() {
   /**
    * Subscribe to one topic
    */
-  private fun subscribeToTopic(topic: String?, registrationToken: String) {
+  private fun subscribeToTopic(topic: String?) {
     topic?.let {
       Log.d(TAG, "Subscribing to Topic: $it")
       FirebaseMessaging.getInstance().subscribeToTopic(it)
@@ -981,7 +979,7 @@ class PushPlugin : CordovaPlugin() {
   /**
    * Unsubscribe to one topic
    */
-  private fun unsubscribeFromTopic(topic: String?, registrationToken: String) {
+  private fun unsubscribeFromTopic(topic: String?) {
     topic?.let {
       Log.d(TAG, "Unsubscribing to topic: $it")
       FirebaseMessaging.getInstance().unsubscribeFromTopic(it)
