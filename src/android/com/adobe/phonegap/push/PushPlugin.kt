@@ -53,7 +53,7 @@ class PushPlugin : CordovaPlugin() {
     }
 
     /**
-     * Sends the pushbundle extras to the client application. If the client
+     * Sends the push bundle extras to the client application. If the client
      * application isn't currently active and the no-cache flag is not set, it is
      * cached for later processing.
      *
@@ -425,6 +425,26 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * Performs various push plugin related tasks:
+   *
+   *  - Initialize
+   *  - Unregister
+   *  - Has Notification Permission Check
+   *  - Set Icon Badge Number
+   *  - Get Icon Badge Number
+   *  - Clear All Notifications
+   *  - Clear Notification
+   *  - Subscribe
+   *  - Unsubscribe
+   *  - Create Channel
+   *  - Delete Channel
+   *  - List Channels
+   *
+   *  @param action
+   *  @param data
+   *  @param callbackContext
+   */
   override fun execute(
     action: String,
     data: JSONArray,
@@ -461,6 +481,11 @@ class PushPlugin : CordovaPlugin() {
     return true
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Initialize task
+   */
   private fun executeActionInitialize(data: JSONArray, callbackContext: CallbackContext) {
     // Better Logging
     fun formatLogMessage(msg: String): String = "Execute::Initialize: ($msg)"
@@ -624,6 +649,11 @@ class PushPlugin : CordovaPlugin() {
     })
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Unregister task
+   */
   private fun executeActionUnregister(data: JSONArray, callbackContext: CallbackContext) {
     // Better Logging
     fun formatLogMessage(msg: String): String = "Execute::Unregister: ($msg)"
@@ -671,6 +701,11 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Has Notification Permission task
+   */
   private fun executeActionHasPermission(callbackContext: CallbackContext) {
     // Better Logging
     fun formatLogMessage(msg: String): String = "Execute::HasPermission: ($msg)"
@@ -699,6 +734,11 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Set Icon Badge Count task
+   */
   private fun executeActionSetIconBadgeNumber(data: JSONArray, callbackContext: CallbackContext) {
     fun formatLogMessage(msg: String): String = "Execute::SetIconBadgeNumber: ($msg)"
 
@@ -716,6 +756,11 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Get Icon Badge Count task
+   */
   private fun executeActionGetIconBadgeNumber(callbackContext: CallbackContext) {
     cordova.threadPool.execute {
       Log.v(TAG, "Execute::GetIconBadgeNumber")
@@ -723,6 +768,11 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Clear All Notifications task
+   */
   private fun executeActionClearAllNotifications(callbackContext: CallbackContext) {
     cordova.threadPool.execute {
       Log.v(TAG, "Execute Clear All Notifications")
@@ -731,6 +781,11 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Subscribe task
+   */
   private fun executeActionSubscribe(data: JSONArray, callbackContext: CallbackContext) {
     cordova.threadPool.execute {
       try {
@@ -744,6 +799,11 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Unsubscribe task
+   */
   private fun executeActionUnsubscribe(data: JSONArray, callbackContext: CallbackContext) {
     cordova.threadPool.execute {
       try {
@@ -757,6 +817,11 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Create Channel task
+   */
   private fun executeActionCreateChannel(data: JSONArray, callbackContext: CallbackContext) {
     cordova.threadPool.execute {
       try {
@@ -769,6 +834,11 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Delete Channel task
+   */
   private fun executeActionDeleteChannel(data: JSONArray, callbackContext: CallbackContext) {
     cordova.threadPool.execute {
       try {
@@ -782,6 +852,11 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the List Channels task
+   */
   private fun executeActionListChannels(callbackContext: CallbackContext) {
     cordova.threadPool.execute {
       try {
@@ -793,6 +868,11 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * An internal sub-process which is called by execute
+   *
+   * Performs the Clear Single Notification task
+   */
   private fun executeActionClearNotification(data: JSONArray, callbackContext: CallbackContext) {
     cordova.threadPool.execute {
       try {
@@ -807,7 +887,7 @@ class PushPlugin : CordovaPlugin() {
   }
 
   /**
-   *
+   * Initialize
    */
   override fun initialize(cordova: CordovaInterface, webView: CordovaWebView) {
     super.initialize(cordova, webView)
@@ -815,7 +895,7 @@ class PushPlugin : CordovaPlugin() {
   }
 
   /**
-   *
+   * Handle when the view is being paused
    */
   override fun onPause(multitasking: Boolean) {
     super.onPause(multitasking)
@@ -823,7 +903,7 @@ class PushPlugin : CordovaPlugin() {
   }
 
   /**
-   *
+   * Handle when the view is resuming
    */
   override fun onResume(multitasking: Boolean) {
     super.onResume(multitasking)
@@ -831,7 +911,7 @@ class PushPlugin : CordovaPlugin() {
   }
 
   /**
-   *
+   * Handle when the view is being destroyed
    */
   override fun onDestroy() {
     isInForeground = false
@@ -850,10 +930,16 @@ class PushPlugin : CordovaPlugin() {
     super.onDestroy()
   }
 
+  /**
+   * Clear all notifications from the Notification Manager
+   */
   private fun clearAllNotifications() {
     notificationManager.cancelAll()
   }
 
+  /**
+   * Cancel/Clear a single notification by ID
+   */
   private fun clearNotification(id: Int) {
     notificationManager.cancel(appName, id)
   }
@@ -902,6 +988,9 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
+  /**
+   * Gets the string resource by name
+   */
   private fun getStringResourceByName(aString: String): String {
     val resId = activity.resources.getIdentifier(aString, "string", activity.packageName)
     return activity.getString(resId)
