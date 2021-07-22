@@ -272,21 +272,10 @@ class PushPlugin : CordovaPlugin() {
       PushConstants.UNREGISTER -> executeActionUnregister(data, callbackContext)
       PushConstants.FINISH -> callbackContext.success()
       PushConstants.HAS_PERMISSION -> executeActionHasPermission(data, callbackContext)
+      PushConstants.SET_APPLICATION_ICON_BADGE_NUMBER -> executeActionSetIconBadgeNumber(
+        data, callbackContext
+      )
 
-      PushConstants.SET_APPLICATION_ICON_BADGE_NUMBER -> {
-        cordova.threadPool.execute {
-          Log.v(TAG, "setApplicationIconBadgeNumber: data=$data")
-          try {
-            setApplicationIconBadgeNumber(
-              applicationContext,
-              data.getJSONObject(0).getInt(PushConstants.BADGE)
-            )
-          } catch (e: JSONException) {
-            callbackContext.error(e.message)
-          }
-          callbackContext.success()
-        }
-      }
       PushConstants.GET_APPLICATION_ICON_BADGE_NUMBER -> {
         cordova.threadPool.execute {
           Log.v(TAG, "getApplicationIconBadgeNumber")
@@ -384,10 +373,7 @@ class PushPlugin : CordovaPlugin() {
     return true
   }
 
-  private fun executeActionInitialize(
-    data: JSONArray,
-    callbackContext: CallbackContext
-  ) {
+  private fun executeActionInitialize(data: JSONArray, callbackContext: CallbackContext) {
     // Better Logging
     fun formatLogMessage(msg: String): String = "Execute Initialize: ($msg)"
 
@@ -550,10 +536,7 @@ class PushPlugin : CordovaPlugin() {
     })
   }
 
-  private fun executeActionUnregister(
-    data: JSONArray,
-    callbackContext: CallbackContext
-  ) {
+  private fun executeActionUnregister(data: JSONArray, callbackContext: CallbackContext) {
     // Better Logging
     fun formatLogMessage(msg: String): String = "Execute Unregister: ($msg)"
 
@@ -600,10 +583,7 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
-  private fun executeActionHasPermission(
-    data: JSONArray,
-    callbackContext: CallbackContext
-  ) {
+  private fun executeActionHasPermission(data: JSONArray, callbackContext: CallbackContext) {
     // Better Logging
     fun formatLogMessage(msg: String): String = "Execute Unregister: ($msg)"
 
@@ -631,8 +611,21 @@ class PushPlugin : CordovaPlugin() {
     }
   }
 
-  private fun executeActionSetApplicationIconBadgeNumber() {
+  private fun executeActionSetIconBadgeNumber(data: JSONArray, callbackContext: CallbackContext) {
+    fun formatLogMessage(msg: String): String = "Execute Set Badge Number: ($msg)"
 
+    cordova.threadPool.execute {
+      Log.v(TAG, formatLogMessage("data=$data"))
+
+      try {
+        val badgeCount = data.getJSONObject(0).getInt(PushConstants.BADGE)
+        setApplicationIconBadgeNumber(applicationContext, badgeCount)
+      } catch (e: JSONException) {
+        callbackContext.error(e.message)
+      }
+
+      callbackContext.success()
+    }
   }
 
   private fun executeActionGetApplicationIconBadgeNumber() {
