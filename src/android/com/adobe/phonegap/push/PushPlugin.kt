@@ -350,7 +350,7 @@ class PushPlugin : CordovaPlugin() {
 
   private fun executeActionInitialize(data: JSONArray, callbackContext: CallbackContext) {
     // Better Logging
-    fun formatLogMessage(msg: String): String = "Execute Initialize: ($msg)"
+    fun formatLogMessage(msg: String): String = "Execute::Initialize: ($msg)"
 
     cordova.threadPool.execute(Runnable {
       Log.v(TAG, formatLogMessage("Data=$data"))
@@ -513,7 +513,7 @@ class PushPlugin : CordovaPlugin() {
 
   private fun executeActionUnregister(data: JSONArray, callbackContext: CallbackContext) {
     // Better Logging
-    fun formatLogMessage(msg: String): String = "Execute Unregister: ($msg)"
+    fun formatLogMessage(msg: String): String = "Execute::Unregister: ($msg)"
 
     cordova.threadPool.execute {
       try {
@@ -560,7 +560,7 @@ class PushPlugin : CordovaPlugin() {
 
   private fun executeActionHasPermission(callbackContext: CallbackContext) {
     // Better Logging
-    fun formatLogMessage(msg: String): String = "Execute Has Permission: ($msg)"
+    fun formatLogMessage(msg: String): String = "Execute::HasPermission: ($msg)"
 
     cordova.threadPool.execute {
       try {
@@ -587,7 +587,7 @@ class PushPlugin : CordovaPlugin() {
   }
 
   private fun executeActionSetIconBadgeNumber(data: JSONArray, callbackContext: CallbackContext) {
-    fun formatLogMessage(msg: String): String = "Execute Set Badge Number: ($msg)"
+    fun formatLogMessage(msg: String): String = "Execute::SetIconBadgeNumber: ($msg)"
 
     cordova.threadPool.execute {
       Log.v(TAG, formatLogMessage("data=$data"))
@@ -605,7 +605,7 @@ class PushPlugin : CordovaPlugin() {
 
   private fun executeActionGetIconBadgeNumber(callbackContext: CallbackContext) {
     cordova.threadPool.execute {
-      Log.v(TAG, "Execute Get Badge Number")
+      Log.v(TAG, "Execute::GetIconBadgeNumber")
       callbackContext.success(getApplicationIconBadgeNumber(applicationContext))
     }
   }
@@ -621,7 +621,7 @@ class PushPlugin : CordovaPlugin() {
   private fun executeActionSubscribe(data: JSONArray, callbackContext: CallbackContext) {
     cordova.threadPool.execute {
       try {
-        Log.v(TAG, "Execute Subscribe")
+        Log.v(TAG, "Execute::Subscribe")
         val topic = data.getString(0)
         subscribeToTopic(topic, registration_id)
         callbackContext.success()
