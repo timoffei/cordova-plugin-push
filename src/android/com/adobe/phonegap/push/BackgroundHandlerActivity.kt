@@ -44,7 +44,7 @@ class BackgroundHandlerActivity : Activity(), PushConstants {
       notificationManager.cancel(FCMService.getAppName(this), notId)
     }
 
-    val isPushPluginActive = PushPlugin.isActive()
+    val isPushPluginActive = PushPlugin.isActive
 
     processPushBundle(isPushPluginActive, intent)
     finish()
