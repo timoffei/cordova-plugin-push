@@ -270,38 +270,8 @@ class PushPlugin : CordovaPlugin() {
 
     when (action) {
       PushConstants.INITIALIZE -> executeActionInitialize(data, callbackContext)
+      PushConstants.UNREGISTER -> executeActionUnregister(data, callbackContext)
 
-      PushConstants.UNREGISTER -> {
-        cordova.threadPool.execute {
-          try {
-            val sharedPref = applicationContext.getSharedPreferences(
-              PushConstants.COM_ADOBE_PHONEGAP_PUSH,
-              Context.MODE_PRIVATE
-            )
-            val topics = data.optJSONArray(0)
-            if (topics != null && "" != registration_id) {
-              unsubscribeFromTopics(topics, registration_id)
-            } else {
-              FirebaseInstanceId.getInstance().deleteInstanceId()
-              Log.v(TAG, "UNREGISTER")
-
-              // Remove shared prefs
-              val editor = sharedPref.edit()
-              editor.remove(PushConstants.SOUND)
-              editor.remove(PushConstants.VIBRATE)
-              editor.remove(PushConstants.CLEAR_BADGE)
-              editor.remove(PushConstants.CLEAR_NOTIFICATIONS)
-              editor.remove(PushConstants.FORCE_SHOW)
-              editor.remove(PushConstants.SENDER_ID)
-              editor.commit()
-            }
-            callbackContext.success()
-          } catch (e: IOException) {
-            Log.e(TAG, "execute: Got JSON Exception " + e.message)
-            callbackContext.error(e.message)
-          }
-        }
-      }
       PushConstants.FINISH -> {
         callbackContext.success()
       }
@@ -512,6 +482,11 @@ class PushPlugin : CordovaPlugin() {
       }
 
       jo?.let {
+        /**
+         * Add Shared Preferences
+         *
+         * Make sure to remove the preferences in the Remove step.
+         */
         sharedPref.edit()?.apply {
           /**
            * Set Icon
@@ -602,8 +577,54 @@ class PushPlugin : CordovaPlugin() {
     })
   }
 
-  private fun executeActionUnregister() {
+  private fun executeActionUnregister(
+    data: JSONArray,
+    callbackContext: CallbackContext
+  ) {
+    // Better Logging
+    fun formatErrorMessage(msg: String): String = "Execute Unregister: ($msg)"
 
+    cordova.threadPool.execute {
+      try {
+        val sharedPref = applicationContext.getSharedPreferences(
+          PushConstants.COM_ADOBE_PHONEGAP_PUSH,
+          Context.MODE_PRIVATE
+        )
+        val topics = data.optJSONArray(0)
+
+        if (topics != null && registration_id != "") {
+          unsubscribeFromTopics(topics, registration_id)
+        } else {
+          FirebaseInstanceId.getInstance().deleteInstanceId()
+          Log.v(TAG, formatErrorMessage("UNREGISTER"))
+
+          /**
+           * Remove Shared Preferences
+           *
+           * Make sure to remove what was in the Initialize step.
+           */
+          sharedPref.edit()?.apply {
+            remove(PushConstants.ICON)
+            remove(PushConstants.ICON_COLOR)
+            remove(PushConstants.CLEAR_BADGE)
+            remove(PushConstants.SOUND)
+            remove(PushConstants.VIBRATE)
+            remove(PushConstants.CLEAR_NOTIFICATIONS)
+            remove(PushConstants.FORCE_SHOW)
+            remove(PushConstants.SENDER_ID)
+            remove(PushConstants.MESSAGE_KEY)
+            remove(PushConstants.TITLE_KEY)
+
+            commit()
+          }
+        }
+
+        callbackContext.success()
+      } catch (e: IOException) {
+        Log.e(TAG, formatErrorMessage("IO Exception ${e.message}"))
+        callbackContext.error(e.message)
+      }
+    }
   }
 
   private fun executeActionFinish() {
