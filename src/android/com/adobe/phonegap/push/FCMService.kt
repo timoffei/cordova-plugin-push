@@ -44,6 +44,10 @@ class FCMService : FirebaseMessagingService() {
     private const val TAG = "Push_FCMService"
 
     private val messageMap = HashMap<Int, ArrayList<String?>>()
+
+    /**
+     * Get the Application Name from Label
+     */
     fun getAppName(context: Context): String {
       return context.packageManager.getApplicationLabel(context.applicationInfo) as String
     }
@@ -80,6 +84,9 @@ class FCMService : FirebaseMessagingService() {
     }
   }
 
+  /**
+   * On Message Received
+   */
   override fun onMessageReceived(message: RemoteMessage) {
     val from = message.from
     Log.d(TAG, "onMessageReceived (from=$from)")
@@ -131,12 +138,7 @@ class FCMService : FirebaseMessagingService() {
     }
   }
 
-  private fun replaceKey(
-    oldKey: String,
-    newKey: String,
-    extras: Bundle,
-    newExtras: Bundle
-  ) {
+  private fun replaceKey(oldKey: String, newKey: String, extras: Bundle, newExtras: Bundle) {
     /*
      * Change a values key in the extras bundle
      */
@@ -148,9 +150,7 @@ class FCMService : FirebaseMessagingService() {
           newExtras.putString(newKey, value as String?)
         }
 
-        is Boolean -> {
-          newExtras.putBoolean(newKey, (value as Boolean?)!!)
-        }
+        is Boolean -> newExtras.putBoolean(newKey, (value as Boolean?)!!)
 
         is Number -> {
           newExtras.putDouble(newKey, value.toDouble())
@@ -170,7 +170,8 @@ class FCMService : FirebaseMessagingService() {
     return when (key) {
       PushConstants.TITLE,
       PushConstants.MESSAGE,
-      PushConstants.SUMMARY_TEXT -> {
+      PushConstants.SUMMARY_TEXT,
+      -> {
         try {
           val localeObject = JSONObject(value)
           val localeKey = localeObject.getString(PushConstants.LOC_KEY)
@@ -210,7 +211,7 @@ class FCMService : FirebaseMessagingService() {
     key: String,
     messageKey: String?,
     titleKey: String?,
-    newExtras: Bundle
+    newExtras: Bundle,
   ): String {
     /*
      * Replace alternate keys with our canonical value
@@ -267,7 +268,7 @@ class FCMService : FirebaseMessagingService() {
   private fun normalizeExtras(
     extras: Bundle,
     messageKey: String?,
-    titleKey: String?
+    titleKey: String?,
   ): Bundle {
     /*
      * Parse bundle into normalized keys.
@@ -330,11 +331,13 @@ class FCMService : FirebaseMessagingService() {
         val iterator: Iterator<String> = value!!.keySet().iterator()
 
         while (iterator.hasNext()) {
-          val notifkey = iterator.next()
-          Log.d(TAG, "notifkey = $notifkey")
-          val newKey = normalizeKey(notifkey, messageKey, titleKey, newExtras)
-          Log.d(TAG, "replace key $notifkey with $newKey")
-          var valueData = value.getString(notifkey)
+          val notificationKey = iterator.next()
+          Log.d(TAG, "notificationKey = $notificationKey")
+
+          val newKey = normalizeKey(notificationKey, messageKey, titleKey, newExtras)
+          Log.d(TAG, "Replace key $notificationKey with $newKey")
+
+          var valueData = value.getString(notificationKey)
           valueData = localizeKey(newKey, valueData!!)
           newExtras.putString(newKey, valueData)
         }
@@ -429,7 +432,7 @@ class FCMService : FirebaseMessagingService() {
   private fun createNotification(extras: Bundle?) {
     val mNotificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
     val appName = getAppName(this)
-    val notId = parseInt(PushConstants.NOT_ID, extras)
+    val notId = parseNotificationIdToInt(extras)
     val notificationIntent = Intent(this, PushHandlerActivity::class.java).apply {
       addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
       putExtra(PushConstants.PUSH_BUNDLE, extras)
@@ -590,7 +593,7 @@ class FCMService : FirebaseMessagingService() {
     callback: String,
     extras: Bundle?,
     foreground: Boolean,
-    notId: Int
+    notId: Int,
   ) {
     intent.apply {
       putExtra(PushConstants.CALLBACK, callback)
@@ -603,7 +606,7 @@ class FCMService : FirebaseMessagingService() {
   private fun createActions(
     extras: Bundle?,
     mBuilder: NotificationCompat.Builder,
-    notId: Int
+    notId: Int,
   ) {
     Log.d(TAG, "create actions: with in-line")
     val actions = extras!!.getString(PushConstants.ACTIONS)
@@ -631,7 +634,7 @@ class FCMService : FirebaseMessagingService() {
 
           when {
             inline -> {
-              Log.d(TAG,"Version: ${Build.VERSION.SDK_INT} = ${Build.VERSION_CODES.M}")
+              Log.d(TAG, "Version: ${Build.VERSION.SDK_INT} = ${Build.VERSION_CODES.M}")
 
               intent = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
                 Log.d(TAG, "Push Activity")
@@ -761,7 +764,7 @@ class FCMService : FirebaseMessagingService() {
   private fun setNotificationVibration(
     extras: Bundle?,
     vibrateOption: Boolean,
-    mBuilder: NotificationCompat.Builder
+    mBuilder: NotificationCompat.Builder,
   ) {
     val vibrationPattern = extras!!.getString(PushConstants.VIBRATION_PATTERN)
     if (vibrationPattern != null) {
@@ -790,7 +793,7 @@ class FCMService : FirebaseMessagingService() {
   private fun setNotificationMessage(
     notId: Int,
     extras: Bundle?,
-    mBuilder: NotificationCompat.Builder
+    mBuilder: NotificationCompat.Builder,
   ) {
     extras?.let {
       val message = it.getString(PushConstants.MESSAGE)
@@ -984,7 +987,7 @@ class FCMService : FirebaseMessagingService() {
 
   private fun setNotificationLargeIcon(
     extras: Bundle?,
-    mBuilder: NotificationCompat.Builder
+    mBuilder: NotificationCompat.Builder,
   ) {
     extras?.let {
       val gcmLargeIcon = it.getString(PushConstants.IMAGE)
@@ -1046,7 +1049,7 @@ class FCMService : FirebaseMessagingService() {
   private fun setNotificationSmallIcon(
     extras: Bundle?,
     mBuilder: NotificationCompat.Builder,
-    localIcon: String?
+    localIcon: String?,
   ) {
     extras?.let {
       val icon = it.getString(PushConstants.ICON)
@@ -1073,7 +1076,7 @@ class FCMService : FirebaseMessagingService() {
   private fun setNotificationIconColor(
     color: String?,
     mBuilder: NotificationCompat.Builder,
-    localIconColor: String?
+    localIconColor: String?,
   ) {
     val iconColor = when {
       color != null && color != "" -> {
@@ -1119,15 +1122,17 @@ class FCMService : FirebaseMessagingService() {
     }
   }
 
-  private fun parseInt(value: String, extras: Bundle?): Int {
+  private fun parseNotificationIdToInt(extras: Bundle?): Int {
     var returnVal = 0
+
     try {
-      returnVal = extras!!.getString(value)!!.toInt()
+      returnVal = extras!!.getString(PushConstants.NOT_ID)!!.toInt()
     } catch (e: NumberFormatException) {
-      Log.e(TAG, "Number format exception - Error parsing " + value + ": " + e.message)
+      Log.e(TAG, "NumberFormatException occurred: ${PushConstants.NOT_ID}: ${e.message}")
     } catch (e: Exception) {
-      Log.e(TAG, "Number format exception - Error parsing " + value + ": " + e.message)
+      Log.e(TAG, "Exception occurred when parsing ${PushConstants.NOT_ID}: ${e.message}")
     }
+
     return returnVal
   }
 
