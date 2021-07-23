@@ -199,35 +199,15 @@ class PushPlugin : CordovaPlugin() {
       get() = gWebView != null
   }
 
-  /**
-   * Gets Cordova's AppCompatActivity
-   *
-   * @return AppCompatActivity
-   */
   private val activity: AppCompatActivity
     get() = cordova.activity
 
-  /**
-   * Gets the application context from Cordova's main activity.
-   *
-   * @return Context of the application
-   */
   private val applicationContext: Context
     get() = activity.applicationContext
 
-  /**
-   * Get the NotificationManager of the activity.
-   *
-   * @return NotificationManager
-   */
   private val notificationManager: NotificationManager
     get() = (activity.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager)
 
-  /**
-   * Return the application name
-   *
-   * @return String
-   */
   private val appName: String
     get() = activity.packageManager.getApplicationLabel(activity.applicationInfo) as String
 
