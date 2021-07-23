@@ -37,7 +37,7 @@ import java.util.*
 @SuppressLint("NewApi", "LogConditional")
 class FCMService : FirebaseMessagingService() {
   companion object {
-    private const val LOG_TAG = "Push_FCMService"
+    private const val TAG = "Push_FCMService"
 
     private val messageMap = HashMap<Int, ArrayList<String?>>()
     fun getAppName(context: Context): String {
@@ -65,7 +65,7 @@ class FCMService : FirebaseMessagingService() {
 
   override fun onMessageReceived(message: RemoteMessage) {
     val from = message.from
-    Log.d(LOG_TAG, "onMessageReceived (from=$from)")
+    Log.d(TAG, "onMessageReceived (from=$from)")
 
     var extras = Bundle()
 
@@ -104,15 +104,15 @@ class FCMService : FirebaseMessagingService() {
       // if we are in the foreground and forceShow is `false` only send data
       val forceShow = prefs.getBoolean(PushConstants.FORCE_SHOW, false)
       if (!forceShow && isInForeground) {
-        Log.d(LOG_TAG, "Do Not Force & Is In Foreground")
+        Log.d(TAG, "Do Not Force & Is In Foreground")
         extras.putBoolean(PushConstants.COLDSTART, false)
         sendExtras(extras)
       } else if (forceShow && isInForeground) {
-        Log.d(LOG_TAG, "Force & Is In Foreground")
+        Log.d(TAG, "Force & Is In Foreground")
         extras.putBoolean(PushConstants.COLDSTART, false)
         showNotificationIfPossible(extras)
       } else {
-        Log.d(LOG_TAG, "In Background")
+        Log.d(TAG, "In Background")
         extras.putBoolean(PushConstants.COLDSTART, isActive)
         showNotificationIfPossible(extras)
       }
@@ -182,11 +182,11 @@ class FCMService : FirebaseMessagingService() {
           if (resourceId != 0) {
             context.resources.getString(resourceId, *localeFormatData.toTypedArray())
           } else {
-            Log.d(LOG_TAG, "Can't Find Locale Resource (key=$localeKey)")
+            Log.d(TAG, "Can't Find Locale Resource (key=$localeKey)")
             value
           }
         } catch (e: JSONException) {
-          Log.d(LOG_TAG, "No Locale Found (key= $key, error=${e.message})")
+          Log.d(TAG, "No Locale Found (key= $key, error=${e.message})")
           value
         }
       }
@@ -260,14 +260,14 @@ class FCMService : FirebaseMessagingService() {
     /*
      * Parse bundle into normalized keys.
      */
-    Log.d(LOG_TAG, "normalize extras")
+    Log.d(TAG, "normalize extras")
 
     val it: Iterator<String> = extras.keySet().iterator()
     val newExtras = Bundle()
 
     while (it.hasNext()) {
       val key = it.next()
-      Log.d(LOG_TAG, "key = $key")
+      Log.d(TAG, "key = $key")
 
       // If normalizeKey, the key is "data" or "message" and the value is a json object extract
       // This is to support parse.com and other services. Issue #147 and pull #218
@@ -276,7 +276,7 @@ class FCMService : FirebaseMessagingService() {
 
         // Make sure data is json object stringified
         if (json is String && json.startsWith("{")) {
-          Log.d(LOG_TAG, "extracting nested message data from key = $key")
+          Log.d(TAG, "extracting nested message data from key = $key")
 
           try {
             // If object contains message keys promote each value to the root of the bundle
@@ -293,7 +293,7 @@ class FCMService : FirebaseMessagingService() {
 
               while (jsonIter.hasNext()) {
                 var jsonKey = jsonIter.next()
-                Log.d(LOG_TAG, "key = data/$jsonKey")
+                Log.d(TAG, "key = data/$jsonKey")
 
                 var value = data.getString(jsonKey)
                 jsonKey = normalizeKey(jsonKey, messageKey, titleKey, newExtras)
@@ -302,15 +302,15 @@ class FCMService : FirebaseMessagingService() {
               }
             } else if (data.has(PushConstants.LOC_KEY) || data.has(PushConstants.LOC_DATA)) {
               val newKey = normalizeKey(key, messageKey, titleKey, newExtras)
-              Log.d(LOG_TAG, "replace key $key with $newKey")
+              Log.d(TAG, "replace key $key with $newKey")
               replaceKey(key, newKey, extras, newExtras)
             }
           } catch (e: JSONException) {
-            Log.e(LOG_TAG, "normalizeExtras: JSON exception")
+            Log.e(TAG, "normalizeExtras: JSON exception")
           }
         } else {
           val newKey = normalizeKey(key, messageKey, titleKey, newExtras)
-          Log.d(LOG_TAG, "replace key $key with $newKey")
+          Log.d(TAG, "replace key $key with $newKey")
           replaceKey(key, newKey, extras, newExtras)
         }
       } else if (key == "notification") {
@@ -319,9 +319,9 @@ class FCMService : FirebaseMessagingService() {
 
         while (iterator.hasNext()) {
           val notifkey = iterator.next()
-          Log.d(LOG_TAG, "notifkey = $notifkey")
+          Log.d(TAG, "notifkey = $notifkey")
           val newKey = normalizeKey(notifkey, messageKey, titleKey, newExtras)
-          Log.d(LOG_TAG, "replace key $notifkey with $newKey")
+          Log.d(TAG, "replace key $notifkey with $newKey")
           var valueData = value.getString(notifkey)
           valueData = localizeKey(newKey, valueData!!)
           newExtras.putString(newKey, valueData)
@@ -334,7 +334,7 @@ class FCMService : FirebaseMessagingService() {
         // See issue #1663
       } else {
         val newKey = normalizeKey(key, messageKey, titleKey, newExtras)
-        Log.d(LOG_TAG, "replace key $key with $newKey")
+        Log.d(TAG, "replace key $key with $newKey")
         replaceKey(key, newKey, extras, newExtras)
       }
     } // while
@@ -349,7 +349,7 @@ class FCMService : FirebaseMessagingService() {
         count = it.toInt()
       }
     } catch (e: NumberFormatException) {
-      Log.e(LOG_TAG, e.localizedMessage, e)
+      Log.e(TAG, e.localizedMessage, e)
     }
 
     return count
@@ -373,17 +373,17 @@ class FCMService : FirebaseMessagingService() {
         mNotificationManager.cancelAll()
       }
 
-      Log.d(LOG_TAG, "message=$message")
-      Log.d(LOG_TAG, "title=$title")
-      Log.d(LOG_TAG, "contentAvailable=$contentAvailable")
-      Log.d(LOG_TAG, "forceStart=$forceStart")
-      Log.d(LOG_TAG, "badgeCount=$badgeCount")
+      Log.d(TAG, "message=$message")
+      Log.d(TAG, "title=$title")
+      Log.d(TAG, "contentAvailable=$contentAvailable")
+      Log.d(TAG, "forceStart=$forceStart")
+      Log.d(TAG, "badgeCount=$badgeCount")
 
       val hasMessage = message != null && message.isNotEmpty()
       val hasTitle = title != null && title.isNotEmpty()
 
       if (hasMessage || hasTitle) {
-        Log.d(LOG_TAG, "Create Notification")
+        Log.d(TAG, "Create Notification")
 
         if (!hasTitle) {
           extras.putString(PushConstants.TITLE, getAppName(this))
@@ -393,7 +393,7 @@ class FCMService : FirebaseMessagingService() {
       }
 
       if (!isActive && forceStart == "1") {
-        Log.d(LOG_TAG, "The app is not running, attempting to start in the background")
+        Log.d(TAG, "The app is not running, attempting to start in the background")
 
         val intent = Intent(this, PushHandlerActivity::class.java).apply {
           addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -405,7 +405,7 @@ class FCMService : FirebaseMessagingService() {
         startActivity(intent)
       } else if (contentAvailable == "1") {
         Log.d(
-          LOG_TAG,
+          TAG,
           "The app is not running and content available is true, sending notification event"
         )
 
@@ -466,7 +466,7 @@ class FCMService : FirebaseMessagingService() {
         } else {
           PushConstants.DEFAULT_CHANNEL_ID
         }
-        Log.d(LOG_TAG, "Using channel ID = $channelID")
+        Log.d(TAG, "Using channel ID = $channelID")
         mBuilder = NotificationCompat.Builder(context, channelID!!)
       }
     } else {
@@ -488,10 +488,10 @@ class FCMService : FirebaseMessagingService() {
     val soundOption = prefs.getBoolean(PushConstants.SOUND, true)
     val vibrateOption = prefs.getBoolean(PushConstants.VIBRATE, true)
 
-    Log.d(LOG_TAG, "stored icon=$localIcon")
-    Log.d(LOG_TAG, "stored iconColor=$localIconColor")
-    Log.d(LOG_TAG, "stored sound=$soundOption")
-    Log.d(LOG_TAG, "stored vibrate=$vibrateOption")
+    Log.d(TAG, "stored icon=$localIcon")
+    Log.d(TAG, "stored iconColor=$localIconColor")
+    Log.d(TAG, "stored sound=$soundOption")
+    Log.d(TAG, "stored vibrate=$vibrateOption")
 
     /*
      * Notification Vibration
@@ -599,7 +599,7 @@ class FCMService : FirebaseMessagingService() {
     mBuilder: NotificationCompat.Builder,
     notId: Int
   ) {
-    Log.d(LOG_TAG, "create actions: with in-line")
+    Log.d(TAG, "create actions: with in-line")
     val actions = extras!!.getString(PushConstants.ACTIONS)
     if (actions != null) {
       try {
@@ -611,11 +611,11 @@ class FCMService : FirebaseMessagingService() {
           val random = SecureRandom()
           val uniquePendingIntentRequestCode = random.nextInt(max - min + 1) + min
 
-          Log.d(LOG_TAG, "adding action")
+          Log.d(TAG, "adding action")
 
           val action = actionsArray.getJSONObject(i)
 
-          Log.d(LOG_TAG, "adding callback = " + action.getString(PushConstants.CALLBACK))
+          Log.d(TAG, "adding callback = " + action.getString(PushConstants.CALLBACK))
 
           val foreground = action.optBoolean(PushConstants.FOREGROUND, true)
           val inline = action.optBoolean("inline", false)
@@ -624,14 +624,14 @@ class FCMService : FirebaseMessagingService() {
 
           if (inline) {
             Log.d(
-              LOG_TAG,
+              TAG,
               "Version: " + Build.VERSION.SDK_INT + " = " + Build.VERSION_CODES.M
             )
             intent = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
-              Log.d(LOG_TAG, "push activity")
+              Log.d(TAG, "push activity")
               Intent(this, PushHandlerActivity::class.java)
             } else {
-              Log.d(LOG_TAG, "push receiver")
+              Log.d(TAG, "push receiver")
               Intent(this, BackgroundActionButtonHandler::class.java)
             }
             updateIntent(
@@ -642,7 +642,7 @@ class FCMService : FirebaseMessagingService() {
               notId
             )
             pIntent = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
-              Log.d(LOG_TAG, "push activity for notId $notId")
+              Log.d(TAG, "push activity for notId $notId")
               PendingIntent.getActivity(
                 this,
                 uniquePendingIntentRequestCode,
@@ -650,7 +650,7 @@ class FCMService : FirebaseMessagingService() {
                 PendingIntent.FLAG_ONE_SHOT
               )
             } else {
-              Log.d(LOG_TAG, "push receiver for notId $notId")
+              Log.d(TAG, "push receiver for notId $notId")
               PendingIntent.getBroadcast(
                 this,
                 uniquePendingIntentRequestCode,
@@ -696,7 +696,7 @@ class FCMService : FirebaseMessagingService() {
           var remoteInput: RemoteInput?
 
           if (inline) {
-            Log.d(LOG_TAG, "create remote input")
+            Log.d(TAG, "create remote input")
             val replyLabel =
               action.optString(PushConstants.INLINE_REPLY_LABEL, "Enter your reply here")
             remoteInput =
@@ -729,7 +729,7 @@ class FCMService : FirebaseMessagingService() {
   private fun setNotificationCount(extras: Bundle?, mBuilder: NotificationCompat.Builder) {
     val count = extractBadgeCount(extras)
     if (count >= 0) {
-      Log.d(LOG_TAG, "count =[$count]")
+      Log.d(TAG, "count =[$count]")
       mBuilder.setNumber(count)
     }
   }
@@ -745,7 +745,7 @@ class FCMService : FirebaseMessagingService() {
         ) {
           mBuilder.setVisibility(visibilityInt)
         } else {
-          Log.e(LOG_TAG, "Visibility parameter must be between -1 and 1")
+          Log.e(TAG, "Visibility parameter must be between -1 and 1")
         }
       } catch (e: NumberFormatException) {
         e.printStackTrace()
@@ -882,7 +882,7 @@ class FCMService : FirebaseMessagingService() {
             "${ContentResolver.SCHEME_ANDROID_RESOURCE}://${context.packageName}/raw/$soundName"
           )
 
-          Log.d(LOG_TAG, "Sound URL: $sound")
+          Log.d(TAG, "Sound URL: $sound")
 
           mBuilder.setSound(sound)
         }
@@ -910,7 +910,7 @@ class FCMService : FirebaseMessagingService() {
           try {
             results[i] = items[i].trim { it <= ' ' }.toInt()
           } catch (nfe: NumberFormatException) {
-            Log.e(LOG_TAG, "Number Format Exception: $nfe")
+            Log.e(TAG, "Number Format Exception: $nfe")
           }
         }
 
@@ -918,7 +918,7 @@ class FCMService : FirebaseMessagingService() {
           val (alpha, red, green, blue) = results
           mBuilder.setLights(Color.argb(alpha, red, green, blue), 500, 500)
         } else {
-          Log.e(LOG_TAG, "ledColor parameter must be an array of length == 4 (ARGB)")
+          Log.e(TAG, "ledColor parameter must be an array of length == 4 (ARGB)")
         }
       }
     }
@@ -936,7 +936,7 @@ class FCMService : FirebaseMessagingService() {
           ) {
             mBuilder.priority = priority
           } else {
-            Log.e(LOG_TAG, "Priority parameter must be between -2 and 2")
+            Log.e(TAG, "Priority parameter must be between -2 and 2")
           }
         } catch (e: NumberFormatException) {
           e.printStackTrace()
@@ -1000,7 +1000,7 @@ class FCMService : FirebaseMessagingService() {
             mBuilder.setLargeIcon(bm)
           }
 
-          Log.d(LOG_TAG, "Using remote large-icon from GCM")
+          Log.d(TAG, "Using remote large-icon from GCM")
         } else {
           try {
             val inputStream: InputStream = assets.open(gcmLargeIcon)
@@ -1014,16 +1014,16 @@ class FCMService : FirebaseMessagingService() {
               mBuilder.setLargeIcon(bm)
             }
 
-            Log.d(LOG_TAG, "Using assets large-icon from GCM")
+            Log.d(TAG, "Using assets large-icon from GCM")
           } catch (e: IOException) {
             var largeIconId: Int = getImageId(gcmLargeIcon)
 
             if (largeIconId != 0) {
               val largeIconBitmap = BitmapFactory.decodeResource(context.resources, largeIconId)
               mBuilder.setLargeIcon(largeIconBitmap)
-              Log.d(LOG_TAG, "Using resources large-icon from GCM")
+              Log.d(TAG, "Using resources large-icon from GCM")
             } else {
-              Log.d(LOG_TAG, "Not large icon settings")
+              Log.d(TAG, "Not large icon settings")
             }
           }
         }
@@ -1057,7 +1057,7 @@ class FCMService : FirebaseMessagingService() {
         }
 
         else -> {
-          Log.d(LOG_TAG, "No icon resource found from settings, using application icon")
+          Log.d(TAG, "No icon resource found from settings, using application icon")
           context.applicationInfo.icon
         }
       }
@@ -1076,7 +1076,7 @@ class FCMService : FirebaseMessagingService() {
         try {
           Color.parseColor(color)
         } catch (e: IllegalArgumentException) {
-          Log.e(LOG_TAG, "Couldn't parse color from Android options")
+          Log.e(TAG, "Couldn't parse color from Android options")
         }
       }
 
@@ -1084,12 +1084,12 @@ class FCMService : FirebaseMessagingService() {
         try {
           Color.parseColor(localIconColor)
         } catch (e: IllegalArgumentException) {
-          Log.e(LOG_TAG, "Couldn't parse color from android options")
+          Log.e(TAG, "Couldn't parse color from android options")
         }
       }
 
       else -> {
-        Log.d(LOG_TAG, "No icon color settings found")
+        Log.d(TAG, "No icon color settings found")
         0
       }
     }
@@ -1120,9 +1120,9 @@ class FCMService : FirebaseMessagingService() {
     try {
       returnVal = extras!!.getString(value)!!.toInt()
     } catch (e: NumberFormatException) {
-      Log.e(LOG_TAG, "Number format exception - Error parsing " + value + ": " + e.message)
+      Log.e(TAG, "Number format exception - Error parsing " + value + ": " + e.message)
     } catch (e: Exception) {
-      Log.e(LOG_TAG, "Number format exception - Error parsing " + value + ": " + e.message)
+      Log.e(TAG, "Number format exception - Error parsing " + value + ": " + e.message)
     }
     return returnVal
   }
@@ -1137,7 +1137,7 @@ class FCMService : FirebaseMessagingService() {
       MODE_PRIVATE
     )
     val savedSenderID = sharedPref.getString(PushConstants.SENDER_ID, "")
-    Log.d(LOG_TAG, "sender id = $savedSenderID")
+    Log.d(TAG, "sender id = $savedSenderID")
     return from == savedSenderID || from!!.startsWith("/topics/")
   }
 }
