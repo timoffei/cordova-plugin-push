@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.graphics.*
 import android.net.Uri
 import android.os.Build
@@ -51,6 +52,12 @@ class FCMService : FirebaseMessagingService() {
   private val context: Context
     get() = applicationContext
 
+  private val pushSharedPref: SharedPreferences
+    get() = context.getSharedPreferences(
+      PushConstants.COM_ADOBE_PHONEGAP_PUSH,
+      MODE_PRIVATE
+    )
+
   /**
    * Set Notification
    * If message is empty or null, the message list is cleared.
@@ -92,18 +99,13 @@ class FCMService : FirebaseMessagingService() {
     }
 
     if (isAvailableSender(from)) {
-      val prefs = context.getSharedPreferences(
-        PushConstants.COM_ADOBE_PHONEGAP_PUSH,
-        MODE_PRIVATE
-      )
-
-      val messageKey = prefs.getString(PushConstants.MESSAGE_KEY, PushConstants.MESSAGE)
-      val titleKey = prefs.getString(PushConstants.TITLE_KEY, PushConstants.TITLE)
+      val messageKey = pushSharedPref.getString(PushConstants.MESSAGE_KEY, PushConstants.MESSAGE)
+      val titleKey = pushSharedPref.getString(PushConstants.TITLE_KEY, PushConstants.TITLE)
 
       extras = normalizeExtras(extras, messageKey, titleKey)
 
       // Clear Badge
-      val clearBadge = prefs.getBoolean(PushConstants.CLEAR_BADGE, false)
+      val clearBadge = pushSharedPref.getBoolean(PushConstants.CLEAR_BADGE, false)
       if (clearBadge) {
         setApplicationIconBadgeNumber(context, 0)
       }
@@ -112,7 +114,7 @@ class FCMService : FirebaseMessagingService() {
       extras.putBoolean(PushConstants.FOREGROUND, isInForeground)
 
       // if we are in the foreground and forceShow is `false` only send data
-      val forceShow = prefs.getBoolean(PushConstants.FORCE_SHOW, false)
+      val forceShow = pushSharedPref.getBoolean(PushConstants.FORCE_SHOW, false)
       if (!forceShow && isInForeground) {
         Log.d(TAG, "Do Not Force & Is In Foreground")
         extras.putBoolean(PushConstants.COLDSTART, false)
@@ -489,14 +491,10 @@ class FCMService : FirebaseMessagingService() {
       .setDeleteIntent(deleteIntent)
       .setAutoCancel(true)
 
-    val prefs = context.getSharedPreferences(
-      PushConstants.COM_ADOBE_PHONEGAP_PUSH,
-      MODE_PRIVATE
-    )
-    val localIcon = prefs.getString(PushConstants.ICON, null)
-    val localIconColor = prefs.getString(PushConstants.ICON_COLOR, null)
-    val soundOption = prefs.getBoolean(PushConstants.SOUND, true)
-    val vibrateOption = prefs.getBoolean(PushConstants.VIBRATE, true)
+    val localIcon = pushSharedPref.getString(PushConstants.ICON, null)
+    val localIconColor = pushSharedPref.getString(PushConstants.ICON_COLOR, null)
+    val soundOption = pushSharedPref.getBoolean(PushConstants.SOUND, true)
+    val vibrateOption = pushSharedPref.getBoolean(PushConstants.VIBRATE, true)
 
     Log.d(TAG, "stored icon=$localIcon")
     Log.d(TAG, "stored iconColor=$localIconColor")
@@ -1141,11 +1139,7 @@ class FCMService : FirebaseMessagingService() {
   }
 
   private fun isAvailableSender(from: String?): Boolean {
-    val sharedPref = context.getSharedPreferences(
-      PushConstants.COM_ADOBE_PHONEGAP_PUSH,
-      MODE_PRIVATE
-    )
-    val savedSenderID = sharedPref.getString(PushConstants.SENDER_ID, "")
+    val savedSenderID = pushSharedPref.getString(PushConstants.SENDER_ID, "")
     Log.d(TAG, "sender id = $savedSenderID")
     return from == savedSenderID || from!!.startsWith("/topics/")
   }
