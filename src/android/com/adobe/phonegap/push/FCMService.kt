@@ -484,6 +484,7 @@ class FCMService : FirebaseMessagingService() {
     } else {
       mBuilder = NotificationCompat.Builder(context)
     }
+
     mBuilder.setWhen(System.currentTimeMillis())
       .setContentTitle(fromHtml(extras!!.getString(PushConstants.TITLE)))
       .setTicker(fromHtml(extras.getString(PushConstants.TITLE)))
@@ -511,7 +512,6 @@ class FCMService : FirebaseMessagingService() {
      *
      * Sets the small-icon background color of the notification.
      * To use, add the `iconColor` key to plugin android options
-     *
      */
     setNotificationIconColor(extras.getString(PushConstants.COLOR), mBuilder, localIconColor)
 
@@ -525,7 +525,6 @@ class FCMService : FirebaseMessagingService() {
      *
      * The icon value must be a string that maps to a drawable resource.
      * If no resource is found, falls
-     *
      */
     setNotificationSmallIcon(extras, mBuilder, localIcon)
 
@@ -539,7 +538,6 @@ class FCMService : FirebaseMessagingService() {
      * - checks to see if assets image, Loads It.
      * - checks to see if resource image, LOADS IT!
      * - if none, we don't set the large icon
-     *
      */
     setNotificationLargeIcon(extras, mBuilder)
 
@@ -629,71 +627,62 @@ class FCMService : FirebaseMessagingService() {
           val inline = action.optBoolean("inline", false)
           var intent: Intent?
           var pIntent: PendingIntent?
+          val callback = action.getString(PushConstants.CALLBACK)
 
-          if (inline) {
-            Log.d(
-              TAG,
-              "Version: " + Build.VERSION.SDK_INT + " = " + Build.VERSION_CODES.M
-            )
-            intent = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
-              Log.d(TAG, "push activity")
-              Intent(this, PushHandlerActivity::class.java)
-            } else {
-              Log.d(TAG, "push receiver")
-              Intent(this, BackgroundActionButtonHandler::class.java)
+          when {
+            inline -> {
+              Log.d(TAG,"Version: ${Build.VERSION.SDK_INT} = ${Build.VERSION_CODES.M}")
+
+              intent = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
+                Log.d(TAG, "Push Activity")
+                Intent(this, PushHandlerActivity::class.java)
+              } else {
+                Log.d(TAG, "Push Receiver")
+                Intent(this, BackgroundActionButtonHandler::class.java)
+              }
+
+              updateIntent(intent, callback, extras, foreground, notId)
+
+              pIntent = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
+                Log.d(TAG, "push activity for notId $notId")
+
+                PendingIntent.getActivity(
+                  this,
+                  uniquePendingIntentRequestCode,
+                  intent,
+                  PendingIntent.FLAG_ONE_SHOT
+                )
+              } else {
+                Log.d(TAG, "push receiver for notId $notId")
+
+                PendingIntent.getBroadcast(
+                  this,
+                  uniquePendingIntentRequestCode,
+                  intent,
+                  PendingIntent.FLAG_ONE_SHOT
+                )
+              }
             }
-            updateIntent(
-              intent,
-              action.getString(PushConstants.CALLBACK),
-              extras,
-              foreground,
-              notId
-            )
-            pIntent = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.M) {
-              Log.d(TAG, "push activity for notId $notId")
-              PendingIntent.getActivity(
-                this,
-                uniquePendingIntentRequestCode,
+
+            foreground -> {
+              intent = Intent(this, PushHandlerActivity::class.java)
+              updateIntent(intent, callback, extras, foreground, notId)
+              pIntent = PendingIntent.getActivity(
+                this, uniquePendingIntentRequestCode,
                 intent,
-                PendingIntent.FLAG_ONE_SHOT
-              )
-            } else {
-              Log.d(TAG, "push receiver for notId $notId")
-              PendingIntent.getBroadcast(
-                this,
-                uniquePendingIntentRequestCode,
-                intent,
-                PendingIntent.FLAG_ONE_SHOT
+                PendingIntent.FLAG_UPDATE_CURRENT
               )
             }
-          } else if (foreground) {
-            intent = Intent(this, PushHandlerActivity::class.java)
-            updateIntent(
-              intent,
-              action.getString(PushConstants.CALLBACK),
-              extras,
-              foreground,
-              notId
-            )
-            pIntent = PendingIntent.getActivity(
-              this, uniquePendingIntentRequestCode,
-              intent,
-              PendingIntent.FLAG_UPDATE_CURRENT
-            )
-          } else {
-            intent = Intent(this, BackgroundActionButtonHandler::class.java)
-            updateIntent(
-              intent,
-              action.getString(PushConstants.CALLBACK),
-              extras,
-              foreground,
-              notId
-            )
-            pIntent = PendingIntent.getBroadcast(
-              this, uniquePendingIntentRequestCode,
-              intent,
-              PendingIntent.FLAG_UPDATE_CURRENT
-            )
+
+            else -> {
+              intent = Intent(this, BackgroundActionButtonHandler::class.java)
+              updateIntent(intent, callback, extras, foreground, notId)
+              pIntent = PendingIntent.getBroadcast(
+                this, uniquePendingIntentRequestCode,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT
+              )
+            }
           }
           val actionBuilder = NotificationCompat.Action.Builder(
             getImageId(action.optString(PushConstants.ICON, "")),
@@ -704,16 +693,23 @@ class FCMService : FirebaseMessagingService() {
           var remoteInput: RemoteInput?
 
           if (inline) {
-            Log.d(TAG, "create remote input")
-            val replyLabel =
-              action.optString(PushConstants.INLINE_REPLY_LABEL, "Enter your reply here")
-            remoteInput =
-              RemoteInput.Builder(PushConstants.INLINE_REPLY).setLabel(replyLabel).build()
+            Log.d(TAG, "Create Remote Input")
+
+            val replyLabel = action.optString(
+              PushConstants.INLINE_REPLY_LABEL,
+              "Enter your reply here"
+            )
+
+            remoteInput = RemoteInput.Builder(PushConstants.INLINE_REPLY)
+              .setLabel(replyLabel)
+              .build()
+
             actionBuilder.addRemoteInput(remoteInput)
           }
 
           var wAction: NotificationCompat.Action? = actionBuilder.build()
           wActions.add(actionBuilder.build())
+
           if (inline) {
             mBuilder.addAction(wAction)
           } else {
@@ -726,6 +722,7 @@ class FCMService : FirebaseMessagingService() {
           wAction = null
           pIntent = null
         }
+
         mBuilder.extend(NotificationCompat.WearableExtender().addActions(wActions))
         wActions.clear()
       } catch (e: JSONException) {
