@@ -21,7 +21,6 @@ import androidx.core.app.RemoteInput
 import com.adobe.phonegap.push.BackgroundActionButtonHandler
 import com.adobe.phonegap.push.PushDismissedHandler
 import com.adobe.phonegap.push.PushHandlerActivity
-import com.adobe.phonegap.push.PushPlugin
 import com.adobe.phonegap.push.PushPlugin.Companion.isActive
 import com.adobe.phonegap.push.PushPlugin.Companion.isInForeground
 import com.adobe.phonegap.push.PushPlugin.Companion.sendExtras
@@ -39,7 +38,7 @@ import java.security.SecureRandom
 import java.util.*
 
 @SuppressLint("NewApi")
-class FCMService : FirebaseMessagingService(), PushConstants {
+class FCMService : FirebaseMessagingService() {
   fun setNotification(notId: Int, message: String?) {
     var messageList = messageMap[notId]
     if (messageList == null) {
@@ -186,7 +185,7 @@ class FCMService : FirebaseMessagingService(), PushConstants {
       key.substring(PushConstants.GCM_N.length + 1, key.length)
     } else if (key.startsWith(PushConstants.UA_PREFIX)) {
       key = key.substring(PushConstants.UA_PREFIX.length + 1, key.length)
-      key.toLowerCase()
+      key.lowercase()
     } else if (key.startsWith(PushConstants.AWS_PINPOINT_PREFIX)) {
       key.substring(PushConstants.AWS_PINPOINT_PREFIX.length + 1, key.length)
     } else {
