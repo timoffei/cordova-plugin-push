@@ -33,6 +33,9 @@ import java.net.URL
 import java.security.SecureRandom
 import java.util.*
 
+/**
+ * Firebase Cloud Messaging Service Class
+ */
 @Suppress("HardCodedStringLiteral")
 @SuppressLint("NewApi", "LogConditional")
 class FCMService : FirebaseMessagingService() {
@@ -45,9 +48,16 @@ class FCMService : FirebaseMessagingService() {
     }
   }
 
-  val context: Context
+  private val context: Context
     get() = applicationContext
 
+  /**
+   * Set Notification
+   * If message is empty or null, the message list is cleared.
+   *
+   * @param notId
+   * @param message
+   */
   fun setNotification(notId: Int, message: String?) {
     var messageList = messageMap[notId]
 
@@ -1016,7 +1026,7 @@ class FCMService : FirebaseMessagingService() {
 
             Log.d(TAG, "Using assets large-icon from GCM")
           } catch (e: IOException) {
-            var largeIconId: Int = getImageId(gcmLargeIcon)
+            val largeIconId: Int = getImageId(gcmLargeIcon)
 
             if (largeIconId != 0) {
               val largeIconBitmap = BitmapFactory.decodeResource(context.resources, largeIconId)
