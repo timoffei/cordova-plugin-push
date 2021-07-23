@@ -770,10 +770,7 @@ class FCMService : FirebaseMessagingService() {
   ) {
     val vibrationPattern = extras!!.getString(PushConstants.VIBRATION_PATTERN)
     if (vibrationPattern != null) {
-      val items = vibrationPattern
-        .replace("\\[".toRegex(), "")
-        .replace("\\]".toRegex(), "")
-        .split(",").toTypedArray()
+      val items = convertToTypedArray(vibrationPattern)
       val results = LongArray(items.size)
       for (i in items.indices) {
         try {
@@ -904,16 +901,18 @@ class FCMService : FirebaseMessagingService() {
     }
   }
 
+  private fun convertToTypedArray(item: String): Array<String> {
+    return item.replace("\\[".toRegex(), "")
+      .replace("\\]".toRegex(), "")
+      .split(",")
+      .toTypedArray()
+  }
+
   private fun setNotificationLedColor(extras: Bundle?, mBuilder: NotificationCompat.Builder) {
     extras?.let { it ->
       it.getString(PushConstants.LED_COLOR)?.let { ledColor ->
         // Convert ledColor to Int Typed Array
-        val items = ledColor
-          .replace("\\[".toRegex(), "")
-          .replace("\\]".toRegex(), "")
-          .split(",")
-          .toTypedArray()
-
+        val items = convertToTypedArray(ledColor)
         val results = IntArray(items.size)
 
         for (i in items.indices) {
