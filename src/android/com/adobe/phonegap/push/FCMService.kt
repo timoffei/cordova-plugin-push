@@ -17,9 +17,6 @@ import android.text.Spanned
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.RemoteInput
-import com.adobe.phonegap.push.BackgroundActionButtonHandler
-import com.adobe.phonegap.push.PushDismissedHandler
-import com.adobe.phonegap.push.PushHandlerActivity
 import com.adobe.phonegap.push.PushPlugin.Companion.isActive
 import com.adobe.phonegap.push.PushPlugin.Companion.isInForeground
 import com.adobe.phonegap.push.PushPlugin.Companion.sendExtras
@@ -39,6 +36,15 @@ import java.util.*
 @Suppress("HardCodedStringLiteral")
 @SuppressLint("NewApi", "LogConditional")
 class FCMService : FirebaseMessagingService() {
+  companion object {
+    private const val LOG_TAG = "Push_FCMService"
+
+    private val messageMap = HashMap<Int, ArrayList<String?>>()
+    fun getAppName(context: Context): String {
+      return context.packageManager.getApplicationLabel(context.applicationInfo) as String
+    }
+  }
+
   val context: Context
     get() = applicationContext
 
@@ -604,13 +610,18 @@ class FCMService : FirebaseMessagingService() {
           val max = 2000000000
           val random = SecureRandom()
           val uniquePendingIntentRequestCode = random.nextInt(max - min + 1) + min
+
           Log.d(LOG_TAG, "adding action")
+
           val action = actionsArray.getJSONObject(i)
+
           Log.d(LOG_TAG, "adding callback = " + action.getString(PushConstants.CALLBACK))
+
           val foreground = action.optBoolean(PushConstants.FOREGROUND, true)
           val inline = action.optBoolean("inline", false)
           var intent: Intent?
           var pIntent: PendingIntent?
+
           if (inline) {
             Log.d(
               LOG_TAG,
@@ -681,7 +692,9 @@ class FCMService : FirebaseMessagingService() {
             action.getString(PushConstants.TITLE),
             pIntent
           )
-          var remoteInput: RemoteInput? = null
+
+          var remoteInput: RemoteInput?
+
           if (inline) {
             Log.d(LOG_TAG, "create remote input")
             val replyLabel =
@@ -690,6 +703,7 @@ class FCMService : FirebaseMessagingService() {
               RemoteInput.Builder(PushConstants.INLINE_REPLY).setLabel(replyLabel).build()
             actionBuilder.addRemoteInput(remoteInput)
           }
+
           var wAction: NotificationCompat.Action? = actionBuilder.build()
           wActions.add(actionBuilder.build())
           if (inline) {
@@ -721,14 +735,15 @@ class FCMService : FirebaseMessagingService() {
   }
 
   private fun setVisibility(extras: Bundle?, mBuilder: NotificationCompat.Builder) {
-    val visibilityStr = extras!!.getString(PushConstants.VISIBILITY)
-    if (visibilityStr != null) {
+    extras?.getString(PushConstants.VISIBILITY)?.let { visibilityStr ->
       try {
-        val visibility = visibilityStr.toInt()
-        if (visibility >= NotificationCompat.VISIBILITY_SECRET
-          && visibility <= NotificationCompat.VISIBILITY_PUBLIC
+        val visibilityInt = visibilityStr.toInt()
+
+        if (
+          visibilityInt >= NotificationCompat.VISIBILITY_SECRET
+          && visibilityInt <= NotificationCompat.VISIBILITY_PUBLIC
         ) {
-          mBuilder.setVisibility(visibility)
+          mBuilder.setVisibility(visibilityInt)
         } else {
           Log.e(LOG_TAG, "Visibility parameter must be between -1 and 1")
         }
@@ -765,8 +780,9 @@ class FCMService : FirebaseMessagingService() {
   }
 
   private fun setNotificationOngoing(extras: Bundle?, mBuilder: NotificationCompat.Builder) {
-    val ongoing = java.lang.Boolean.parseBoolean(extras!!.getString(PushConstants.ONGOING, "false"))
-    mBuilder.setOngoing(ongoing)
+    extras?.getString(PushConstants.ONGOING, "false")?.let {
+      mBuilder.setOngoing(it.toBoolean())
+    }
   }
 
   private fun setNotificationMessage(
@@ -774,123 +790,157 @@ class FCMService : FirebaseMessagingService() {
     extras: Bundle?,
     mBuilder: NotificationCompat.Builder
   ) {
-    val message = extras!!.getString(PushConstants.MESSAGE)
-    val style = extras.getString(PushConstants.STYLE, PushConstants.STYLE_TEXT)
-    if (PushConstants.STYLE_INBOX == style) {
-      setNotification(notId, message)
-      mBuilder.setContentText(fromHtml(message))
-      val messageList = messageMap[notId]!!
-      val sizeList = messageList.size
-      if (sizeList > 1) {
-        val sizeListMessage = sizeList.toString()
-        var stacking: String? = "$sizeList more"
-        if (extras.getString(PushConstants.SUMMARY_TEXT) != null) {
-          stacking = extras.getString(PushConstants.SUMMARY_TEXT)
-          stacking = stacking!!.replace("%n%", sizeListMessage)
+    extras?.let {
+      val message = it.getString(PushConstants.MESSAGE)
+
+      when (it.getString(PushConstants.STYLE, PushConstants.STYLE_TEXT)) {
+        PushConstants.STYLE_INBOX -> {
+          setNotification(notId, message)
+          mBuilder.setContentText(fromHtml(message))
+
+          messageMap[notId]?.let { messageList ->
+            val sizeList = messageList.size
+
+            if (sizeList > 1) {
+              val sizeListMessage = sizeList.toString()
+              var stacking: String? = "$sizeList more"
+
+              it.getString(PushConstants.SUMMARY_TEXT)?.let { summaryText ->
+                stacking = summaryText.replace("%n%", sizeListMessage)
+              }
+
+              val notificationInbox = NotificationCompat.InboxStyle().run {
+                setBigContentTitle(fromHtml(it.getString(PushConstants.TITLE)))
+                setSummaryText(fromHtml(stacking))
+              }.also { inbox ->
+                for (i in messageList.indices.reversed()) {
+                  inbox.addLine(fromHtml(messageList[i]))
+                }
+              }
+
+              mBuilder.setStyle(notificationInbox)
+            } else {
+              message?.let { message ->
+                val bigText = NotificationCompat.BigTextStyle().run {
+                  bigText(fromHtml(message))
+                  setBigContentTitle(fromHtml(it.getString(PushConstants.TITLE)))
+                }
+
+                mBuilder.setStyle(bigText)
+              }
+            }
+          }
         }
-        val notificationInbox = NotificationCompat.InboxStyle()
-          .setBigContentTitle(fromHtml(extras.getString(PushConstants.TITLE)))
-          .setSummaryText(fromHtml(stacking))
-        for (i in messageList.indices.reversed()) {
-          notificationInbox.addLine(fromHtml(messageList[i]))
+
+        PushConstants.STYLE_PICTURE -> {
+          setNotification(notId, "")
+          val bigPicture = NotificationCompat.BigPictureStyle().run {
+            bigPicture(getBitmapFromURL(it.getString(PushConstants.PICTURE)))
+            setBigContentTitle(fromHtml(it.getString(PushConstants.TITLE)))
+            setSummaryText(fromHtml(it.getString(PushConstants.SUMMARY_TEXT)))
+          }
+
+          mBuilder.apply {
+            setContentTitle(fromHtml(it.getString(PushConstants.TITLE)))
+            setContentText(fromHtml(message))
+            setStyle(bigPicture)
+          }
         }
-        mBuilder.setStyle(notificationInbox)
-      } else {
-        val bigText = NotificationCompat.BigTextStyle()
-        if (message != null) {
-          bigText.bigText(fromHtml(message))
-          bigText.setBigContentTitle(fromHtml(extras.getString(PushConstants.TITLE)))
-          mBuilder.setStyle(bigText)
+
+        else -> {
+          setNotification(notId, "")
+
+          message?.let { messageStr ->
+            val bigText = NotificationCompat.BigTextStyle().run {
+              bigText(fromHtml(messageStr))
+              setBigContentTitle(fromHtml(it.getString(PushConstants.TITLE)))
+
+              it.getString(PushConstants.SUMMARY_TEXT)?.let { summaryText ->
+                setSummaryText(fromHtml(summaryText))
+              }
+            }
+
+            mBuilder.setContentText(fromHtml(messageStr))
+            mBuilder.setStyle(bigText)
+          }
         }
       }
-    } else if (PushConstants.STYLE_PICTURE == style) {
-      setNotification(notId, "")
-      val bigPicture = NotificationCompat.BigPictureStyle()
-      bigPicture.bigPicture(getBitmapFromURL(extras.getString(PushConstants.PICTURE)))
-      bigPicture.setBigContentTitle(fromHtml(extras.getString(PushConstants.TITLE)))
-      bigPicture.setSummaryText(fromHtml(extras.getString(PushConstants.SUMMARY_TEXT)))
-      mBuilder.setContentTitle(fromHtml(extras.getString(PushConstants.TITLE)))
-      mBuilder.setContentText(fromHtml(message))
-      mBuilder.setStyle(bigPicture)
-    } else {
-      setNotification(notId, "")
-      val bigText = NotificationCompat.BigTextStyle()
-      if (message != null) {
-        mBuilder.setContentText(fromHtml(message))
-        bigText.bigText(fromHtml(message))
-        bigText.setBigContentTitle(fromHtml(extras.getString(PushConstants.TITLE)))
-        val summaryText = extras.getString(PushConstants.SUMMARY_TEXT)
-        if (summaryText != null) {
-          bigText.setSummaryText(fromHtml(summaryText))
-        }
-        mBuilder.setStyle(bigText)
-      }
-      /*
-      else {
-          mBuilder.setContentText("<missing message content>");
-      }
-      */
     }
   }
 
   private fun setNotificationSound(extras: Bundle?, mBuilder: NotificationCompat.Builder) {
-    var soundname = extras!!.getString(PushConstants.SOUNDNAME)
-    if (soundname == null) {
-      soundname = extras.getString(PushConstants.SOUND)
-    }
-    if (PushConstants.SOUND_RINGTONE == soundname) {
-      mBuilder.setSound(Settings.System.DEFAULT_RINGTONE_URI)
-    } else if (soundname != null && !soundname.contentEquals(PushConstants.SOUND_DEFAULT)) {
-      val sound = Uri
-        .parse(ContentResolver.SCHEME_ANDROID_RESOURCE + "://" + context.packageName + "/raw/" + soundname)
-      Log.d(LOG_TAG, sound.toString())
-      mBuilder.setSound(sound)
-    } else {
-      mBuilder.setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
+    extras?.let {
+      val soundName = it.getString(PushConstants.SOUNDNAME) ?: it.getString(PushConstants.SOUND)
+
+      when {
+        soundName == PushConstants.SOUND_RINGTONE -> {
+          mBuilder.setSound(Settings.System.DEFAULT_RINGTONE_URI)
+        }
+
+        soundName != null && !soundName.contentEquals(PushConstants.SOUND_DEFAULT) -> {
+          val sound = Uri.parse(
+            "${ContentResolver.SCHEME_ANDROID_RESOURCE}://${context.packageName}/raw/$soundName"
+          )
+
+          Log.d(LOG_TAG, "Sound URL: $sound")
+
+          mBuilder.setSound(sound)
+        }
+
+        else -> {
+          mBuilder.setSound(Settings.System.DEFAULT_NOTIFICATION_URI)
+        }
+      }
     }
   }
 
   private fun setNotificationLedColor(extras: Bundle?, mBuilder: NotificationCompat.Builder) {
-    val ledColor = extras!!.getString(PushConstants.LED_COLOR)
-    if (ledColor != null) {
-      // Converts parse Int Array from ledColor
-      val items = ledColor
-        .replace("\\[".toRegex(), "")
-        .replace("\\]".toRegex(), "")
-        .split(",").toTypedArray()
-      val results = IntArray(items.size)
-      for (i in items.indices) {
-        try {
-          results[i] = items[i].trim { it <= ' ' }.toInt()
-        } catch (nfe: NumberFormatException) {
+    extras?.let { it ->
+      it.getString(PushConstants.LED_COLOR)?.let { ledColor ->
+        // Convert ledColor to Int Typed Array
+        val items = ledColor
+          .replace("\\[".toRegex(), "")
+          .replace("\\]".toRegex(), "")
+          .split(",")
+          .toTypedArray()
+
+        val results = IntArray(items.size)
+
+        for (i in items.indices) {
+          try {
+            results[i] = items[i].trim { it <= ' ' }.toInt()
+          } catch (nfe: NumberFormatException) {
+            Log.e(LOG_TAG, "Number Format Exception: $nfe")
+          }
         }
-      }
-      if (results.size == 4) {
-        mBuilder.setLights(
-          Color.argb(results[0], results[1], results[2], results[3]),
-          500,
-          500
-        )
-      } else {
-        Log.e(LOG_TAG, "ledColor parameter must be an array of length == 4 (ARGB)")
+
+        if (results.size == 4) {
+          val (alpha, red, green, blue) = results
+          mBuilder.setLights(Color.argb(alpha, red, green, blue), 500, 500)
+        } else {
+          Log.e(LOG_TAG, "ledColor parameter must be an array of length == 4 (ARGB)")
+        }
       }
     }
   }
 
   private fun setNotificationPriority(extras: Bundle?, mBuilder: NotificationCompat.Builder) {
-    val priorityStr = extras!!.getString(PushConstants.PRIORITY)
-    if (priorityStr != null) {
-      try {
-        val priority = priorityStr.toInt()
-        if (priority >= NotificationCompat.PRIORITY_MIN
-          && priority <= NotificationCompat.PRIORITY_MAX
-        ) {
-          mBuilder.priority = priority
-        } else {
-          Log.e(LOG_TAG, "Priority parameter must be between -2 and 2")
+    extras?.let { it ->
+      it.getString(PushConstants.PRIORITY)?.let { priorityStr ->
+        try {
+          val priority = priorityStr.toInt()
+
+          if (
+            priority >= NotificationCompat.PRIORITY_MIN
+            && priority <= NotificationCompat.PRIORITY_MAX
+          ) {
+            mBuilder.priority = priority
+          } else {
+            Log.e(LOG_TAG, "Priority parameter must be between -2 and 2")
+          }
+        } catch (e: NumberFormatException) {
+          e.printStackTrace()
         }
-      } catch (e: NumberFormatException) {
-        e.printStackTrace()
       }
     }
   }
@@ -899,25 +949,31 @@ class FCMService : FirebaseMessagingService() {
     if (bitmap == null) {
       return null
     }
+
     val output = Bitmap.createBitmap(
       bitmap.width,
       bitmap.height,
       Bitmap.Config.ARGB_8888
     )
-    val canvas = Canvas(output)
-    val color = Color.RED
-    val paint = Paint()
-    val rect = Rect(0, 0, bitmap.width, bitmap.height)
-    val rectF = RectF(rect)
-    paint.isAntiAlias = true
-    canvas.drawARGB(0, 0, 0, 0)
-    paint.color = color
-    val cx = (bitmap.width / 2).toFloat()
-    val cy = (bitmap.height / 2).toFloat()
-    val radius = if (cx < cy) cx else cy
-    canvas.drawCircle(cx, cy, radius, paint)
-    paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-    canvas.drawBitmap(bitmap, rect, rect, paint)
+
+    val paint = Paint().apply {
+      isAntiAlias = true
+      color = Color.RED
+      xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+    }
+
+    Canvas(output).apply {
+      drawARGB(0, 0, 0, 0)
+
+      val cx = (bitmap.width / 2).toFloat()
+      val cy = (bitmap.height / 2).toFloat()
+      val radius = if (cx < cy) cx else cy
+      val rect = Rect(0, 0, bitmap.width, bitmap.height)
+
+      drawCircle(cx, cy, radius, paint)
+      drawBitmap(bitmap, rect, rect, paint)
+    }
+
     bitmap.recycle()
     return output
   }
@@ -926,40 +982,49 @@ class FCMService : FirebaseMessagingService() {
     extras: Bundle?,
     mBuilder: NotificationCompat.Builder
   ) {
-    val gcmLargeIcon = extras!!.getString(PushConstants.IMAGE) // from gcm
-    val imageType = extras.getString(PushConstants.IMAGE_TYPE, PushConstants.IMAGE_TYPE_SQUARE)
-    if (gcmLargeIcon != null && "" != gcmLargeIcon) {
-      if (gcmLargeIcon.startsWith("http://") || gcmLargeIcon.startsWith("https://")) {
-        val bitmap = getBitmapFromURL(gcmLargeIcon)
-        if (PushConstants.IMAGE_TYPE_SQUARE.equals(imageType, ignoreCase = true)) {
-          mBuilder.setLargeIcon(bitmap)
-        } else {
-          val bm = getCircleBitmap(bitmap)
-          mBuilder.setLargeIcon(bm)
-        }
-        Log.d(LOG_TAG, "using remote large-icon from gcm")
-      } else {
-        val assetManager = assets
-        val istr: InputStream
-        try {
-          istr = assetManager.open(gcmLargeIcon)
-          val bitmap = BitmapFactory.decodeStream(istr)
+    extras?.let {
+      val gcmLargeIcon = it.getString(PushConstants.IMAGE)
+      val imageType = it.getString(PushConstants.IMAGE_TYPE, PushConstants.IMAGE_TYPE_SQUARE)
+
+      if (gcmLargeIcon != null && gcmLargeIcon != "") {
+        if (
+          gcmLargeIcon.startsWith("http://")
+          || gcmLargeIcon.startsWith("https://")
+        ) {
+          val bitmap = getBitmapFromURL(gcmLargeIcon)
+
           if (PushConstants.IMAGE_TYPE_SQUARE.equals(imageType, ignoreCase = true)) {
             mBuilder.setLargeIcon(bitmap)
           } else {
             val bm = getCircleBitmap(bitmap)
             mBuilder.setLargeIcon(bm)
           }
-          Log.d(LOG_TAG, "using assets large-icon from gcm")
-        } catch (e: IOException) {
-          var largeIconId = 0
-          largeIconId = getImageId(gcmLargeIcon)
-          if (largeIconId != 0) {
-            val largeIconBitmap = BitmapFactory.decodeResource(context.resources, largeIconId)
-            mBuilder.setLargeIcon(largeIconBitmap)
-            Log.d(LOG_TAG, "using resources large-icon from gcm")
-          } else {
-            Log.d(LOG_TAG, "Not setting large icon")
+
+          Log.d(LOG_TAG, "Using remote large-icon from GCM")
+        } else {
+          try {
+            val inputStream: InputStream = assets.open(gcmLargeIcon)
+
+            val bitmap = BitmapFactory.decodeStream(inputStream)
+
+            if (PushConstants.IMAGE_TYPE_SQUARE.equals(imageType, ignoreCase = true)) {
+              mBuilder.setLargeIcon(bitmap)
+            } else {
+              val bm = getCircleBitmap(bitmap)
+              mBuilder.setLargeIcon(bm)
+            }
+
+            Log.d(LOG_TAG, "Using assets large-icon from GCM")
+          } catch (e: IOException) {
+            var largeIconId: Int = getImageId(gcmLargeIcon)
+
+            if (largeIconId != 0) {
+              val largeIconBitmap = BitmapFactory.decodeResource(context.resources, largeIconId)
+              mBuilder.setLargeIcon(largeIconBitmap)
+              Log.d(LOG_TAG, "Using resources large-icon from GCM")
+            } else {
+              Log.d(LOG_TAG, "Not large icon settings")
+            }
           }
         }
       }
@@ -979,20 +1044,26 @@ class FCMService : FirebaseMessagingService() {
     mBuilder: NotificationCompat.Builder,
     localIcon: String?
   ) {
-    var iconId = 0
-    val icon = extras!!.getString(PushConstants.ICON)
-    if (icon != null && "" != icon) {
-      iconId = getImageId(icon)
-      Log.d(LOG_TAG, "using icon from plugin options")
-    } else if (localIcon != null && "" != localIcon) {
-      iconId = getImageId(localIcon)
-      Log.d(LOG_TAG, "using icon from plugin options")
+    extras?.let {
+      val icon = it.getString(PushConstants.ICON)
+
+      val iconId = when {
+        icon != null && icon != "" -> {
+          getImageId(icon)
+        }
+
+        localIcon != null && localIcon != "" -> {
+          getImageId(localIcon)
+        }
+
+        else -> {
+          Log.d(LOG_TAG, "No icon resource found from settings, using application icon")
+          context.applicationInfo.icon
+        }
+      }
+
+      mBuilder.setSmallIcon(iconId)
     }
-    if (iconId == 0) {
-      Log.d(LOG_TAG, "no icon resource found - using application icon")
-      iconId = context.applicationInfo.icon
-    }
-    mBuilder.setSmallIcon(iconId)
   }
 
   private fun setNotificationIconColor(
@@ -1000,29 +1071,35 @@ class FCMService : FirebaseMessagingService() {
     mBuilder: NotificationCompat.Builder,
     localIconColor: String?
   ) {
-    var iconColor = 0
-    if (color != null && "" != color) {
-      try {
-        iconColor = Color.parseColor(color)
-      } catch (e: IllegalArgumentException) {
-        Log.e(LOG_TAG, "couldn't parse color from android options")
+    val iconColor = when {
+      color != null && color != "" -> {
+        try {
+          Color.parseColor(color)
+        } catch (e: IllegalArgumentException) {
+          Log.e(LOG_TAG, "Couldn't parse color from Android options")
+        }
       }
-    } else if (localIconColor != null && "" != localIconColor) {
-      try {
-        iconColor = Color.parseColor(localIconColor)
-      } catch (e: IllegalArgumentException) {
-        Log.e(LOG_TAG, "couldn't parse color from android options")
+
+      localIconColor != null && localIconColor != "" -> {
+        try {
+          Color.parseColor(localIconColor)
+        } catch (e: IllegalArgumentException) {
+          Log.e(LOG_TAG, "Couldn't parse color from android options")
+        }
+      }
+
+      else -> {
+        Log.d(LOG_TAG, "No icon color settings found")
+        0
       }
     }
+
     if (iconColor != 0) {
       mBuilder.color = iconColor
     }
   }
 
-  /**
-   * @return Bitmap from URL
-   */
-  fun getBitmapFromURL(strURL: String?): Bitmap? {
+  private fun getBitmapFromURL(strURL: String?): Bitmap? {
     return try {
       val url = URL(strURL)
       val connection = (url.openConnection() as HttpURLConnection).apply {
@@ -1039,15 +1116,15 @@ class FCMService : FirebaseMessagingService() {
   }
 
   private fun parseInt(value: String, extras: Bundle?): Int {
-    var retval = 0
+    var returnVal = 0
     try {
-      retval = extras!!.getString(value)!!.toInt()
+      returnVal = extras!!.getString(value)!!.toInt()
     } catch (e: NumberFormatException) {
       Log.e(LOG_TAG, "Number format exception - Error parsing " + value + ": " + e.message)
     } catch (e: Exception) {
       Log.e(LOG_TAG, "Number format exception - Error parsing " + value + ": " + e.message)
     }
-    return retval
+    return returnVal
   }
 
   private fun fromHtml(source: String?): Spanned? {
@@ -1062,14 +1139,5 @@ class FCMService : FirebaseMessagingService() {
     val savedSenderID = sharedPref.getString(PushConstants.SENDER_ID, "")
     Log.d(LOG_TAG, "sender id = $savedSenderID")
     return from == savedSenderID || from!!.startsWith("/topics/")
-  }
-
-  companion object {
-    private const val LOG_TAG = "Push_FCMService"
-
-    private val messageMap = HashMap<Int, ArrayList<String?>>()
-    fun getAppName(context: Context): String {
-      return context.packageManager.getApplicationLabel(context.applicationInfo) as String
-    }
   }
 }
