@@ -3,7 +3,7 @@ module.exports = function (context) {
   const platformVersion = platform.version();
   const majorVersion = parseInt(platformVersion, 10);
 
-  if(majorVersion >= 10) {
+  if (majorVersion >= 10) {
     console.log('[cordova-plugin-push::before-compile] skipping');
     return;
   }
