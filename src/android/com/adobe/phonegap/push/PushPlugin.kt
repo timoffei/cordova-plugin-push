@@ -13,7 +13,6 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.util.Log
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.iid.FirebaseInstanceId
@@ -199,7 +198,7 @@ class PushPlugin : CordovaPlugin() {
       get() = gWebView != null
   }
 
-  private val activity: AppCompatActivity
+  private val activity
     get() = cordova.activity
 
   private val applicationContext: Context
