@@ -2,6 +2,7 @@ package com.adobe.phonegap.push
 
 import android.annotation.SuppressLint
 import android.annotation.TargetApi
+import android.app.Activity
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.ContentResolver
@@ -198,7 +199,7 @@ class PushPlugin : CordovaPlugin() {
       get() = gWebView != null
   }
 
-  private val activity
+  private val activity: Activity
     get() = cordova.activity
 
   private val applicationContext: Context
