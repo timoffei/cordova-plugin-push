@@ -1,31 +1,50 @@
-module.exports = function (context) {
-  const platform = require('cordova-android');
-  const platformVersion = platform.version();
-  const majorVersion = parseInt(platformVersion, 10);
+const { join } = require('path');
+const { existsSync, readFileSync, writeFileSync } = require('fs');
+const { parseElementtreeSync: ParseElementtreeSync } = require('cordova-common/src/util/xml-helpers');
+const platform = require('cordova-android');
 
-  if (majorVersion >= 10) {
-    console.log('[cordova-plugin-push::before-compile] skipping');
+module.exports = function (context) {
+  if (!isExecutable()) {
+    console.log('[cordova-plugin-push::before-compile] skipping before_compile hookscript.');
     return;
   }
 
-  console.log('[cordova-plugin-push::before-compile] updating "build.gradle" kotlin version.');
+  const buildGradleFilePath = join(context.opts.projectRoot, 'platforms/android/build.gradle');
 
-  var path = require('path');
-  var fs = require('fs');
-
-  const platformPath = path.join(context.opts.projectRoot, 'platforms/android');
-  const buildGradle = path.join(platformPath, '/build.gradle');
-
-  if (!fs.existsSync(buildGradle)) {
+  if (!existsSync(buildGradleFilePath)) {
     console.log('[cordova-plugin-push::before-compile] could not find "build.gradle" file.');
     return;
   }
 
-  let buildGradleRaw = fs.readFileSync(buildGradle, 'utf8');
-
-  buildGradleRaw = buildGradleRaw.replace(/ext.kotlin_version = ['"](.*)['"]/g, 'ext.kotlin_version = \'1.5.20\'');
-
-  fs.writeFileSync(buildGradle, buildGradleRaw);
-
-  console.log('[cordova-plugin-push::before-compile] finished updating "build.gradle" file.');
+  updateBuildGradle(context, buildGradleFilePath);
 };
+
+/**
+ * This hookscript is executable only when the platform version less then 10.x
+ * @returns Boolean
+ */
+function isExecutable () {
+  const majorVersion = parseInt(platform.version(), 10);
+  return majorVersion < 10 && majorVersion >= 9;
+}
+
+function getPluginKotlinVersion (context) {
+  const pluginConfig = new ParseElementtreeSync(join(context.opts.projectRoot, 'plugins/@havesource/cordova-plugin-push/plugin.xml'));
+
+  return pluginConfig
+    .findall('./platform[@name="android"]').pop()
+    .findall('./config-file[@target="config.xml"]').pop()
+    .findall('preference').filter(
+      elem => elem.attrib.name.toLowerCase() === 'GradlePluginKotlinVersion'.toLowerCase()
+    ).pop().attrib.value;
+}
+
+function updateBuildGradle (context, buildGradleFilePath) {
+  const kotlinVersion = getPluginKotlinVersion(context);
+  const updateContent = readFileSync(buildGradleFilePath, 'utf8')
+    .replace(/ext.kotlin_version = ['"](.*)['"]/g, `ext.kotlin_version = '${kotlinVersion}'`);
+
+  writeFileSync(buildGradleFilePath, updateContent);
+
+  console.log(`[cordova-plugin-push::before-compile] updated "build.gradle" file with kotlin version set to: ${kotlinVersion}`);
+}
