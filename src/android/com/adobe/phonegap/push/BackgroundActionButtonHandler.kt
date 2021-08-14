@@ -15,7 +15,7 @@ import androidx.core.app.RemoteInput
 @SuppressLint("LongLogTag", "LogConditional")
 class BackgroundActionButtonHandler : BroadcastReceiver() {
   companion object {
-    private const val TAG: String = "Push_BackgroundActionButtonHandler"
+    private const val TAG: String = "${PushPlugin.PREFIX_TAG} (BackgroundActionButtonHandler)"
   }
 
   /**

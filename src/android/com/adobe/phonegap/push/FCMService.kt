@@ -38,10 +38,10 @@ import java.util.*
  * Firebase Cloud Messaging Service Class
  */
 @Suppress("HardCodedStringLiteral")
-@SuppressLint("NewApi", "LogConditional")
+@SuppressLint("NewApi", "LongLogTag", "LogConditional")
 class FCMService : FirebaseMessagingService() {
   companion object {
-    private const val TAG = "Push_FCMService"
+    private const val TAG = "${PushPlugin.PREFIX_TAG} (FCMService)"
 
     private val messageMap = HashMap<Int, ArrayList<String?>>()
 

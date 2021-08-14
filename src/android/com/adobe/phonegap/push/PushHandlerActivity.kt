@@ -16,7 +16,7 @@ import androidx.core.app.RemoteInput
 @SuppressLint("LongLogTag", "LogConditional")
 class PushHandlerActivity : Activity() {
   companion object {
-    private const val TAG: String = "Push_PushHandlerActivity"
+    private const val TAG: String = "${PushPlugin.PREFIX_TAG} (PushHandlerActivity)"
   }
 
   /**

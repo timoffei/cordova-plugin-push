@@ -12,7 +12,7 @@ import com.google.firebase.messaging.FirebaseMessagingService
 @SuppressLint("LongLogTag", "LogConditional")
 class PushInstanceIDListenerService : FirebaseMessagingService() {
   companion object {
-    private const val TAG: String = "Push_PushInstanceIDListenerService"
+    private const val TAG: String = "${PushPlugin.PREFIX_TAG} (PushInstanceIDListenerService)"
   }
 
   /**

@@ -13,7 +13,7 @@ import android.util.Log
 @SuppressLint("LongLogTag")
 class PushDismissedHandler : BroadcastReceiver() {
   companion object {
-    private const val TAG: String = "Push_PushDismissedHandler"
+    private const val TAG: String = "${PushPlugin.PREFIX_TAG} (PushDismissedHandler)"
   }
 
   /**

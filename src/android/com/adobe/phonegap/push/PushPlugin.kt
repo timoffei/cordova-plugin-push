@@ -30,10 +30,11 @@ import java.util.*
  * Cordova Plugin Push
  */
 @Suppress("HardCodedStringLiteral")
-@SuppressLint("LogConditional")
+@SuppressLint("LongLogTag", "LogConditional")
 class PushPlugin : CordovaPlugin() {
   companion object {
-    private const val TAG: String = "Push_PushPlugin"
+    const val PREFIX_TAG: String = "cordova-plugin-push"
+    private const val TAG: String = "$PREFIX_TAG (PushPlugin)"
 
     /**
      * Is the WebView in the foreground?
