@@ -150,7 +150,7 @@ class FCMService : FirebaseMessagingService() {
           newExtras.putString(newKey, value as String?)
         }
 
-        is Boolean -> newExtras.putBoolean(newKey, (value as Boolean?)!!)
+        is Boolean -> newExtras.putBoolean(newKey, (value as Boolean?) ?: return)
 
         is Number -> {
           newExtras.putDouble(newKey, value.toDouble())
@@ -284,10 +284,14 @@ class FCMService : FirebaseMessagingService() {
 
       // If normalizeKey, the key is "data" or "message" and the value is a json object extract
       // This is to support parse.com and other services. Issue #147 and pull #218
-      if (key == PushConstants.PARSE_COM_DATA || key == PushConstants.MESSAGE || key == messageKey) {
+      if (
+        key == PushConstants.PARSE_COM_DATA ||
+        key == PushConstants.MESSAGE ||
+        key == messageKey
+      ) {
         val json = extras[key]
 
-        // Make sure data is json object stringified
+        // Make sure data is in json object string format
         if (json is String && json.startsWith("{")) {
           Log.d(TAG, "extracting nested message data from key = $key")
 
@@ -302,10 +306,10 @@ class FCMService : FirebaseMessagingService() {
               || data.has(messageKey)
               || data.has(titleKey)
             ) {
-              val jsonIter = data.keys()
+              val jsonKeys = data.keys()
 
-              while (jsonIter.hasNext()) {
-                var jsonKey = jsonIter.next()
+              while (jsonKeys.hasNext()) {
+                var jsonKey = jsonKeys.next()
                 Log.d(TAG, "key = data/$jsonKey")
 
                 var value = data.getString(jsonKey)
@@ -466,31 +470,12 @@ class FCMService : FirebaseMessagingService() {
       PendingIntent.FLAG_CANCEL_CURRENT
     )
 
-    var mBuilder: NotificationCompat.Builder?
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      var channelID = extras!!.getString(PushConstants.ANDROID_CHANNEL_ID)
-
-      // if the push payload specifies a channel use it
-      if (channelID != null) {
-        mBuilder = NotificationCompat.Builder(context, channelID)
-      } else {
-        val channels = mNotificationManager.notificationChannels
-        channelID = if (channels.size == 1) {
-          channels[0].id
-        } else {
-          PushConstants.DEFAULT_CHANNEL_ID
-        }
-        Log.d(TAG, "Using channel ID = $channelID")
-        mBuilder = NotificationCompat.Builder(context, channelID!!)
-      }
-    } else {
-      mBuilder = NotificationCompat.Builder(context)
-    }
+    val mBuilder: NotificationCompat.Builder =
+      createNotificationBuilder(extras, mNotificationManager)
 
     mBuilder.setWhen(System.currentTimeMillis())
-      .setContentTitle(fromHtml(extras!!.getString(PushConstants.TITLE)))
-      .setTicker(fromHtml(extras.getString(PushConstants.TITLE)))
+      .setContentTitle(fromHtml(extras?.getString(PushConstants.TITLE)))
+      .setTicker(fromHtml(extras?.getString(PushConstants.TITLE)))
       .setContentIntent(contentIntent)
       .setDeleteIntent(deleteIntent)
       .setAutoCancel(true)
@@ -516,7 +501,7 @@ class FCMService : FirebaseMessagingService() {
      * Sets the small-icon background color of the notification.
      * To use, add the `iconColor` key to plugin android options
      */
-    setNotificationIconColor(extras.getString(PushConstants.COLOR), mBuilder, localIconColor)
+    setNotificationIconColor(extras?.getString(PushConstants.COLOR), mBuilder, localIconColor)
 
     /*
      * Notification Icon
@@ -588,6 +573,37 @@ class FCMService : FirebaseMessagingService() {
     mNotificationManager.notify(appName, notId, mBuilder.build())
   }
 
+  private fun createNotificationBuilder(
+    extras: Bundle?,
+    notificationManager: NotificationManager
+  ): NotificationCompat.Builder {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+      var channelID: String? = null
+
+      if (extras != null) {
+        channelID = extras.getString(PushConstants.ANDROID_CHANNEL_ID)
+      }
+
+      // if the push payload specifies a channel use it
+      return if (channelID != null) {
+        NotificationCompat.Builder(context, channelID)
+      } else {
+        val channels = notificationManager.notificationChannels
+
+        channelID = if (channels.size == 1) {
+          channels[0].id.toString()
+        } else {
+          PushConstants.DEFAULT_CHANNEL_ID
+        }
+
+        Log.d(TAG, "Using channel ID = $channelID")
+        NotificationCompat.Builder(context, channelID)
+      }
+    } else {
+      return NotificationCompat.Builder(context)
+    }
+  }
+
   private fun updateIntent(
     intent: Intent,
     callback: String,
@@ -609,11 +625,18 @@ class FCMService : FirebaseMessagingService() {
     notId: Int,
   ) {
     Log.d(TAG, "create actions: with in-line")
-    val actions = extras!!.getString(PushConstants.ACTIONS)
+
+    if (extras == null) {
+      Log.d(TAG, "create actions: extras is null, skipping")
+      return
+    }
+
+    val actions = extras.getString(PushConstants.ACTIONS)
     if (actions != null) {
       try {
         val actionsArray = JSONArray(actions)
         val wActions = ArrayList<NotificationCompat.Action>()
+
         for (i in 0 until actionsArray.length()) {
           val min = 1
           val max = 2000000000
@@ -710,7 +733,7 @@ class FCMService : FirebaseMessagingService() {
             actionBuilder.addRemoteInput(remoteInput)
           }
 
-          var wAction: NotificationCompat.Action? = actionBuilder.build()
+          val wAction: NotificationCompat.Action = actionBuilder.build()
           wActions.add(actionBuilder.build())
 
           if (inline) {
@@ -722,8 +745,6 @@ class FCMService : FirebaseMessagingService() {
               pIntent
             )
           }
-          wAction = null
-          pIntent = null
         }
 
         mBuilder.extend(NotificationCompat.WearableExtender().addActions(wActions))
@@ -766,7 +787,12 @@ class FCMService : FirebaseMessagingService() {
     vibrateOption: Boolean,
     mBuilder: NotificationCompat.Builder,
   ) {
-    val vibrationPattern = extras!!.getString(PushConstants.VIBRATION_PATTERN)
+    if (extras == null) {
+      Log.d(TAG, "setNotificationVibration: extras is null, skipping")
+      return
+    }
+
+    val vibrationPattern = extras.getString(PushConstants.VIBRATION_PATTERN)
     if (vibrationPattern != null) {
       val items = convertToTypedArray(vibrationPattern)
       val results = LongArray(items.size)
@@ -901,7 +927,7 @@ class FCMService : FirebaseMessagingService() {
 
   private fun convertToTypedArray(item: String): Array<String> {
     return item.replace("\\[".toRegex(), "")
-      .replace("\\]".toRegex(), "")
+      .replace("]".toRegex(), "")
       .split(",")
       .toTypedArray()
   }
