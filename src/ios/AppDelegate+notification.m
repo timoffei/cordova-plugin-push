@@ -197,7 +197,13 @@ NSString *const pushPluginApplicationDidBecomeActiveNotification = @"pushPluginA
     pushHandler.isInline = YES;
     [pushHandler notificationReceived];
 
-    completionHandler(UNNotificationPresentationOptionNone);
+    UNNotificationPresentationOptions presentationOption = UNNotificationPresentationOptionNone;
+    if (@available(iOS 10, *)) {
+      if(pushHandler.forceShow) {
+        presentationOption = UNNotificationPresentationOptionAlert;
+      }
+    }
+    completionHandler(presentationOption);
 }
 
 - (void)userNotificationCenter:(UNUserNotificationCenter *)center
@@ -223,7 +229,14 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
         case UIApplicationStateInactive:
         {
             NSLog(@"coldstart");
-            self.launchNotification = response.notification.request.content.userInfo;
+
+            if([response.actionIdentifier rangeOfString:@"UNNotificationDefaultActionIdentifier"].location == NSNotFound) {
+              self.launchNotification = userInfo;
+            }
+            else {
+              self.launchNotification = response.notification.request.content.userInfo;
+            }
+
             self.coldstart = [NSNumber numberWithBool:YES];
             break;
         }
