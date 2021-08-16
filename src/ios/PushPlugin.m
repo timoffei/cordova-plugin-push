@@ -31,7 +31,7 @@
 
 @import Firebase;
 @import FirebaseCore;
-// @import FirebaseInstanceID;
+@import FirebaseInstanceID;
 @import FirebaseMessaging;
 
 @implementation PushPlugin : CDVPlugin
@@ -56,15 +56,15 @@
 
 -(void)initRegistration;
 {
-    [[FIRMessaging messaging] tokenWithCompletion:^(NSString *token, NSError *error) {
+    [[FIRInstanceID instanceID] instanceIDWithHandler:^(FIRInstanceIDResult * _Nullable result, NSError * _Nullable error) {
         if (error != nil) {
-            NSLog(@"Error getting FCM registration token: %@", error);
+            NSLog(@"Error fetching remote instance ID: %@", error);
         } else {
-            NSLog(@"FCM registration token: %@", token);
+            NSLog(@"Remote instance ID (FCM Registration) Token: %@", result.token);
 
-            [self setFcmRegistrationToken: token];
+            [self setFcmRegistrationToken: result.token];
 
-            NSString* message = [NSString stringWithFormat:@"Remote InstanceID token: %@", token];
+            NSString* message = [NSString stringWithFormat:@"Remote InstanceID token: %@", result.token];
 
             id topics = [self fcmTopics];
             if (topics != nil) {
@@ -75,31 +75,9 @@
                 }
             }
 
-            [self registerWithToken: token];
+            [self registerWithToken:result.token];
         }
     }];
-    // [[FIRInstanceID instanceID] instanceIDWithHandler:^(FIRInstanceIDResult * _Nullable result, NSError * _Nullable error) {
-    //     if (error != nil) {
-    //         NSLog(@"Error fetching remote instance ID: %@", error);
-    //     } else {
-    //         NSLog(@"Remote instance ID (FCM Registration) Token: %@", result.token);
-
-    //         [self setFcmRegistrationToken: result.token];
-
-    //         NSString* message = [NSString stringWithFormat:@"Remote InstanceID token: %@", result.token];
-
-    //         id topics = [self fcmTopics];
-    //         if (topics != nil) {
-    //             for (NSString *topic in topics) {
-    //                 NSLog(@"subscribe to topic: %@", topic);
-    //                 id pubSub = [FIRMessaging messaging];
-    //                 [pubSub subscribeToTopic:topic];
-    //             }
-    //         }
-
-    //         [self registerWithToken:result.token];
-    //     }
-    // }];
 }
 
 //  FCM refresh token
@@ -200,21 +178,21 @@
         }];
     } else {
         NSLog(@"Push Plugin VoIP missing or false");
-        // [[NSNotificationCenter defaultCenter]
-        //  addObserver:self selector:@selector(onTokenRefresh)
-        //  name:kFIRInstanceIDTokenRefreshNotification object:nil];
+        [[NSNotificationCenter defaultCenter]
+         addObserver:self selector:@selector(onTokenRefresh)
+         name:kFIRInstanceIDTokenRefreshNotification object:nil];
 
-        // [[NSNotificationCenter defaultCenter]
-        //  addObserver:self selector:@selector(sendDataMessageFailure:)
-        //  name:FIRMessagingSendErrorNotification object:nil];
+        [[NSNotificationCenter defaultCenter]
+         addObserver:self selector:@selector(sendDataMessageFailure:)
+         name:FIRMessagingSendErrorNotification object:nil];
 
-        // [[NSNotificationCenter defaultCenter]
-        //  addObserver:self selector:@selector(sendDataMessageSuccess:)
-        //  name:FIRMessagingSendSuccessNotification object:nil];
+        [[NSNotificationCenter defaultCenter]
+         addObserver:self selector:@selector(sendDataMessageSuccess:)
+         name:FIRMessagingSendSuccessNotification object:nil];
 
-        // [[NSNotificationCenter defaultCenter]
-        //  addObserver:self selector:@selector(didDeleteMessagesOnServer)
-        //  name:FIRMessagingMessagesDeletedNotification object:nil];
+        [[NSNotificationCenter defaultCenter]
+         addObserver:self selector:@selector(didDeleteMessagesOnServer)
+         name:FIRMessagingMessagesDeletedNotification object:nil];
 
         [self.commandDelegate runInBackground:^ {
             NSLog(@"Push Plugin register called");
